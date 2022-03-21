@@ -32,6 +32,15 @@ var replayCmd = &cobra.Command{
 		chReady := make(chan struct{})
 		defer close(chReady)
 
+		var beginning time.Time
+		if b := viper.GetString("replay.beginning"); b != "" {
+			t, err := time.Parse(models.ArgTimeFormat, b)
+			if err != nil {
+				logrus.Fatal(err)
+			}
+			beginning = t
+		}
+
 		keyTS := viper.GetString("replay.key.timestamp")
 		// open handle to event id 1 and scan to first applicable event
 		pool := errgroup.Group{}
@@ -48,16 +57,38 @@ var replayCmd = &cobra.Command{
 			}
 			defer f.Close()
 
+			r := bufio.NewReader(f)
+
 			w := os.Stdout
 			defer w.Close()
 
 			var last time.Time
+			var found bool
 
+			ticker := time.NewTicker(3 * time.Second)
+			defer ticker.Stop()
+			start := time.Now()
+
+			if !beginning.IsZero() {
+				chTimeStart <- beginning
+			}
 			var count int
-			scanner := bufio.NewScanner(f)
+			var written int
+			scanner := bufio.NewScanner(r)
 		loop:
 			for scanner.Scan() {
 				var e models.Entry
+
+				select {
+				case <-ticker.C:
+					logrus.
+						WithField("eps", float64(count)/time.Since(start).Seconds()).
+						WithField("event_id", 1).
+						WithField("last", last).
+						WithField("written", written).
+						Info("scanning")
+				default:
+				}
 
 				if err := models.Decoder.Unmarshal(scanner.Bytes(), &e); err != nil {
 					return err
@@ -75,7 +106,7 @@ var replayCmd = &cobra.Command{
 					continue loop
 				}
 				// check first event timestamp and communicate it to network event worker
-				if count == 0 {
+				if count == 0 && beginning.IsZero() {
 					logrus.WithField("event_id", 1).Debug("sending first timestamp")
 					// communicate timestamp to network log worker
 					chTimeStart <- ts
@@ -83,12 +114,33 @@ var replayCmd = &cobra.Command{
 					// TODO - add select and configurable timeout
 					logrus.WithField("event_id", 1).Debug("waiting for sync")
 					<-chReady
-				} else if delay := ts.Sub(last); !last.IsZero() && delay > 10*time.Microsecond {
+				} else if !beginning.IsZero() && !found {
+					if ts.Before(beginning) {
+						count++
+						last = ts
+						continue loop
+					}
+					// ts after beginning but not found yet, wait for other worker to be ready
+					logrus.
+						WithField("event_id", 1).
+						WithField("offset", count).
+						WithField("last", last).
+						Info("found beginning, waiting for sync")
+					<-chReady
+					found = true
+					logrus.
+						WithField("event_id", 1).
+						Info("sync done")
+				}
+
+				if delay := ts.Sub(last); !last.IsZero() && delay > 10*time.Microsecond {
 					time.Sleep(delay)
 				}
+
 				last = ts
 
 				w.Write(scanner.Bytes())
+				written++
 				count++
 			}
 			return scanner.Err()
@@ -115,11 +167,27 @@ var replayCmd = &cobra.Command{
 			// pull first timestamp of command logs
 			first := <-chTimeStart
 
+			ticker := time.NewTicker(3 * time.Second)
+			defer ticker.Stop()
+			start := time.Now()
+
 			var count int
+			var written int
 			scanner := bufio.NewScanner(f)
 		loop:
 			for scanner.Scan() {
 				var e models.Entry
+
+				select {
+				case <-ticker.C:
+					logrus.
+						WithField("eps", float64(count)/time.Since(start).Seconds()).
+						WithField("event_id", 3).
+						WithField("last", last).
+						WithField("written", written).
+						Info("scanning")
+				default:
+				}
 
 				if err := models.Decoder.Unmarshal(scanner.Bytes(), &e); err != nil {
 					return err
@@ -138,14 +206,18 @@ var replayCmd = &cobra.Command{
 				}
 
 				if ts.Before(first) {
+					count++
+					last = ts
 					continue loop
 				}
 				if !found {
 					logrus.
 						WithField("offset", count).
 						WithField("event_id", 3).
+						WithField("last", last).
 						Info("skip scan done")
-						// notify previous worker that we're good to go
+
+					// notify previous worker that we're good to go
 					chReady <- struct{}{}
 					found = true
 				}
@@ -156,6 +228,7 @@ var replayCmd = &cobra.Command{
 				last = ts
 
 				w.Write(scanner.Bytes())
+				written++
 				count++
 			}
 			return scanner.Err()
@@ -180,4 +253,7 @@ func init() {
 
 	pFlags.String("key-timestamp", "@timestamp", "Change timestamp JSON key if needed.")
 	viper.BindPFlag("replay.key.timestamp", pFlags.Lookup("key-timestamp"))
+
+	pFlags.String("beginning", "", "Set a explicit replay beginning")
+	viper.BindPFlag("replay.beginning", pFlags.Lookup("beginning"))
 }

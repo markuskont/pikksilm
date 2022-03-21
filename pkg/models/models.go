@@ -8,6 +8,7 @@ import (
 )
 
 var Decoder = jsoniter.ConfigCompatibleWithStandardLibrary
+const ArgTimeFormat = "2006-01-02 15:04:05"
 
 // Entry is a nested map with helper methods for recursive lookups
 type Entry map[string]interface{}
