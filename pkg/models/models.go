@@ -8,12 +8,13 @@ import (
 )
 
 var Decoder = jsoniter.ConfigCompatibleWithStandardLibrary
+
 const ArgTimeFormat = "2006-01-02 15:04:05"
 
 // Entry is a nested map with helper methods for recursive lookups
-type Entry map[string]interface{}
+type Entry map[string]any
 
-func (d Entry) GetDot(key string) (interface{}, bool) {
+func (d Entry) GetDot(key string) (any, bool) {
 	bits := strings.Split(key, ".")
 	if len(bits) == 0 {
 		return nil, false
@@ -23,13 +24,13 @@ func (d Entry) GetDot(key string) (interface{}, bool) {
 
 // Get is a helper for doing recursive lookups into nested maps (nested JSON). Key argument is a
 // slice of strings
-func (d Entry) Get(key ...string) (interface{}, bool) {
+func (d Entry) Get(key ...string) (any, bool) {
 	if len(key) == 0 {
 		return nil, false
 	}
 	if val, ok := d[key[0]]; ok {
 		switch res := val.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			// key has only one item, user wants the map itselt, not subelement
 			if len(key) == 1 {
 				return res, ok
