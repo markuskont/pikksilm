@@ -1,23 +1,41 @@
 package cmd
 
 import (
-	"fmt"
+	"bufio"
+	"os"
 
+	"github.com/markuskont/pikksilm/pkg/enrich"
+	"github.com/markuskont/pikksilm/pkg/models"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
 // runCmd represents the run command
 var runCmd = &cobra.Command{
 	Use:   "run",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Short: "Run the main enrichment procedure",
+	Long: `This command enriches network events by correlating sysmon command and network
+  events via community ID enrichment.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+  pikksilm run`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("run called")
+		c, _ := enrich.NewCorrelate()
+		r := os.Stdin
+		scanner := bufio.NewScanner(r)
+		var count int
+		for scanner.Scan() {
+			var e models.Entry
+			if err := models.Decoder.Unmarshal(scanner.Bytes(), &e); err != nil {
+				logrus.Fatal(err)
+			}
+			if err := c.Winlog(e); err != nil {
+				logrus.Error(err)
+			}
+			count++
+		}
+		if err := scanner.Err(); err != nil {
+			logrus.Fatal(err)
+		}
 	},
 }
 
