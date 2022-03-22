@@ -138,7 +138,7 @@ var replayCmd = &cobra.Command{
 				replaySleep(ts, last, modifier)
 				last = ts
 
-				w.Write(scanner.Bytes())
+				w.Write(append(scanner.Bytes(), []byte("\n")...))
 				written++
 				count++
 			}
@@ -224,7 +224,7 @@ var replayCmd = &cobra.Command{
 				replaySleep(ts, last, modifier)
 				last = ts
 
-				w.Write(scanner.Bytes())
+				w.Write(append(scanner.Bytes(), []byte("\n")...))
 				written++
 				count++
 			}
