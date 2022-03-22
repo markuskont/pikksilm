@@ -33,7 +33,7 @@ var replayCmd = &cobra.Command{
 		defer close(chReady)
 
 		var beginning time.Time
-		if b := viper.GetString("replay.beginning"); b != "" {
+		if b := viper.GetString("replay.time.beginning"); b != "" {
 			t, err := time.Parse(models.ArgTimeFormat, b)
 			if err != nil {
 				logrus.Fatal(err)
@@ -44,6 +44,8 @@ var replayCmd = &cobra.Command{
 		keyTS := viper.GetString("replay.key.timestamp")
 		// open handle to event id 1 and scan to first applicable event
 		pool := errgroup.Group{}
+		// modifier to speed up or slow down the replay
+		modifier := viper.GetFloat64("replay.time.modifier")
 
 		pool.Go(func() error {
 			pth := viper.GetString("replay.log.event_id_1")
@@ -133,10 +135,7 @@ var replayCmd = &cobra.Command{
 						Info("sync done")
 				}
 
-				if delay := ts.Sub(last); !last.IsZero() && delay > 10*time.Microsecond {
-					time.Sleep(delay)
-				}
-
+				replaySleep(ts, last, modifier)
 				last = ts
 
 				w.Write(scanner.Bytes())
@@ -222,9 +221,7 @@ var replayCmd = &cobra.Command{
 					found = true
 				}
 
-				if delay := ts.Sub(last); !last.IsZero() && delay > 10*time.Microsecond {
-					time.Sleep(delay)
-				}
+				replaySleep(ts, last, modifier)
 				last = ts
 
 				w.Write(scanner.Bytes())
@@ -238,6 +235,13 @@ var replayCmd = &cobra.Command{
 			logrus.Fatal(err)
 		}
 	},
+}
+
+func replaySleep(ts, last time.Time, modifier float64) {
+	if delay := ts.Sub(last); !last.IsZero() && delay > 10*time.Microsecond {
+		delay = time.Duration(float64(delay.Nanoseconds()) / modifier)
+		time.Sleep(delay)
+	}
 }
 
 func init() {
@@ -254,6 +258,9 @@ func init() {
 	pFlags.String("key-timestamp", "@timestamp", "Change timestamp JSON key if needed.")
 	viper.BindPFlag("replay.key.timestamp", pFlags.Lookup("key-timestamp"))
 
-	pFlags.String("beginning", "", "Set a explicit replay beginning")
-	viper.BindPFlag("replay.beginning", pFlags.Lookup("beginning"))
+	pFlags.String("time-beginning", "", "Set a explicit replay beginning")
+	viper.BindPFlag("replay.time.beginning", pFlags.Lookup("time-beginning"))
+
+	pFlags.Float64("time-modifier", 1.0, "Simple coefficient to speed up or slow down replay.")
+	viper.BindPFlag("replay.time.modifier", pFlags.Lookup("time-modifier"))
 }
