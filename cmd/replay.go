@@ -238,7 +238,7 @@ var replayCmd = &cobra.Command{
 }
 
 func replaySleep(ts, last time.Time, modifier float64) {
-	if delay := ts.Sub(last); !last.IsZero() && delay > 10*time.Microsecond {
+	if delay := ts.Sub(last); !last.IsZero() && delay > 1*time.Microsecond {
 		delay = time.Duration(float64(delay.Nanoseconds()) / modifier)
 		time.Sleep(delay)
 	}
