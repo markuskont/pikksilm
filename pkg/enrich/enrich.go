@@ -32,7 +32,13 @@ type Correlate struct {
 	gommunityid.CommunityID
 
 	// Community ID lookup table of positive correlations
+	// TODO - make this a sharded pass to workers
 	Enrichments map[string]models.Entry
+
+	// Store network events that don't have a cmd yet
+	ConnectionCache *Buckets
+
+	window time.Duration
 }
 
 func (c *Correlate) Winlog(e models.Entry) error {
@@ -44,6 +50,8 @@ func (c *Correlate) Winlog(e models.Entry) error {
 	if !ok {
 		return errors.New("event id missing")
 	}
+	// current time is used as basis for all correlation ops
+	// now := time.Now()
 	switch eventID {
 	case "3":
 		// network event
@@ -55,37 +63,68 @@ func (c *Correlate) Winlog(e models.Entry) error {
 		// we expect potentially a lot of network events per one command
 		command, ok := c.CommandCache.Check(entityID)
 		if !ok {
-			// command not yet seen
-			// might never be seen, might be out of order
-			// FIXME - should cache this event for period T and recheck later
-			// TODO - store item in slice / linked list and periodically clean it up by
-			// checking each entry against command cache and then dropping entire bucket
-			return nil
+			return c.ConnectionCache.Insert(func(b *Bucket) error {
+				b.NetworkEvents = append(b.NetworkEvents, *ne)
+				return nil
+			})
 		}
 
+		// FIXME - refactor repeat code
 		id, err := ne.CommunityID(c.CommunityID)
-    if err != nil {
-      return err
-    }
+		if err != nil {
+			return err
+		}
 		c.Enrichments[id] = command
 	case "1":
 		// command event
 		// we expect only one command event per entity id
 		c.CommandCache[entityID] = &CommandItem{Data: e}
+		// now we should also do a lookup to see if any network events came before the command
+		c.ConnectionCache.Check(func(b *Bucket) error {
+			if len(b.NetworkEvents) == 0 {
+				return nil
+			}
+			for _, ne := range b.NetworkEvents {
+				if ne.GUID == entityID {
+					// FIXME - refactor repeat code
+					id, err := ne.CommunityID(c.CommunityID)
+					if err != nil {
+						return err
+					}
+					c.Enrichments[id] = e
+				}
+			}
+			return nil
+		}, c.window)
 	default:
 		return nil
 	}
 	return nil
 }
 
-func NewCorrelate() (*Correlate, error) {
+type CorrelateConfig struct {
+	BucketCount  int
+	BucketSize   time.Duration
+	LookupWindow time.Duration
+}
+
+func NewCorrelate(c CorrelateConfig) (*Correlate, error) {
 	cid, err := gommunityid.GetCommunityIDByVersion(1, 0)
 	if err != nil {
 		return nil, err
 	}
+	connCache, err := NewBuckets(c.BucketCount, c.BucketSize)
+	if err != nil {
+		return nil, err
+	}
+	if c.LookupWindow == 0 {
+		return nil, errors.New("Lookup window missing")
+	}
 	return &Correlate{
-		CommandCache: make(CommandCache),
-		CommunityID:  cid,
-		Enrichments:  make(map[string]models.Entry),
+		CommandCache:    make(CommandCache),
+		CommunityID:     cid,
+		Enrichments:     make(map[string]models.Entry),
+		ConnectionCache: connCache,
+    window: c.LookupWindow,
 	}, nil
 }
