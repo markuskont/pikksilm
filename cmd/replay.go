@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/markuskont/pikksilm/pkg/models"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/sync/errgroup"
@@ -36,7 +35,7 @@ var replayCmd = &cobra.Command{
 		if b := viper.GetString("replay.time.beginning"); b != "" {
 			t, err := time.Parse(models.ArgTimeFormat, b)
 			if err != nil {
-				logrus.Fatal(err)
+				log.Fatal(err)
 			}
 			beginning = t
 		}
@@ -49,7 +48,7 @@ var replayCmd = &cobra.Command{
 
 		pool.Go(func() error {
 			pth := viper.GetString("replay.log.event_id_1")
-			logrus.
+			log.
 				WithField("path", pth).
 				Info("Scanning command logs.")
 
@@ -83,7 +82,7 @@ var replayCmd = &cobra.Command{
 
 				select {
 				case <-ticker.C:
-					logrus.
+					log.
 						WithField("eps", float64(count)/time.Since(start).Seconds()).
 						WithField("event_id", 1).
 						WithField("last", last).
@@ -100,7 +99,7 @@ var replayCmd = &cobra.Command{
 					return err
 				}
 				if !ok {
-					logrus.
+					log.
 						WithField("raw", scanner.Text()).
 						WithField("key", keyTS).
 						WithField("event_id", 1).
@@ -109,12 +108,12 @@ var replayCmd = &cobra.Command{
 				}
 				// check first event timestamp and communicate it to network event worker
 				if count == 0 && beginning.IsZero() {
-					logrus.WithField("event_id", 1).Debug("sending first timestamp")
+					log.WithField("event_id", 1).Debug("sending first timestamp")
 					// communicate timestamp to network log worker
 					chTimeStart <- ts
 					// block until it has finished scanning to same timeframe
 					// TODO - add select and configurable timeout
-					logrus.WithField("event_id", 1).Debug("waiting for sync")
+					log.WithField("event_id", 1).Debug("waiting for sync")
 					<-chReady
 				} else if !beginning.IsZero() && !found {
 					if ts.Before(beginning) {
@@ -123,14 +122,14 @@ var replayCmd = &cobra.Command{
 						continue loop
 					}
 					// ts after beginning but not found yet, wait for other worker to be ready
-					logrus.
+					log.
 						WithField("event_id", 1).
 						WithField("offset", count).
 						WithField("last", last).
 						Info("found beginning, waiting for sync")
 					<-chReady
 					found = true
-					logrus.
+					log.
 						WithField("event_id", 1).
 						Info("sync done")
 				}
@@ -147,7 +146,7 @@ var replayCmd = &cobra.Command{
 
 		pool.Go(func() error {
 			pth := viper.GetString("replay.log.event_id_3")
-			logrus.
+			log.
 				WithField("path", pth).
 				Info("Scanning network logs.")
 
@@ -179,7 +178,7 @@ var replayCmd = &cobra.Command{
 
 				select {
 				case <-ticker.C:
-					logrus.
+					log.
 						WithField("eps", float64(count)/time.Since(start).Seconds()).
 						WithField("event_id", 3).
 						WithField("last", last).
@@ -196,7 +195,7 @@ var replayCmd = &cobra.Command{
 					return err
 				}
 				if !ok {
-					logrus.
+					log.
 						WithField("raw", scanner.Text()).
 						WithField("key", keyTS).
 						WithField("event_id", 3).
@@ -210,7 +209,7 @@ var replayCmd = &cobra.Command{
 					continue loop
 				}
 				if !found {
-					logrus.
+					log.
 						WithField("offset", count).
 						WithField("event_id", 3).
 						WithField("last", last).
@@ -232,7 +231,7 @@ var replayCmd = &cobra.Command{
 		})
 
 		if err := pool.Wait(); err != nil {
-			logrus.Fatal(err)
+			log.Fatal(err)
 		}
 	},
 }

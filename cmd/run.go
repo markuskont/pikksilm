@@ -7,7 +7,6 @@ import (
 
 	"github.com/markuskont/pikksilm/pkg/enrich"
 	"github.com/markuskont/pikksilm/pkg/models"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -27,23 +26,34 @@ var runCmd = &cobra.Command{
 			LookupWindow: viper.GetDuration("run.buckets.lookup"),
 		})
 		if err != nil {
-			logrus.Fatal(err)
+			log.Fatal(err)
 		}
 		r := os.Stdin
 		scanner := bufio.NewScanner(r)
+		tick := time.NewTicker(3 * time.Second)
+		defer tick.Stop()
 		var count int
 		for scanner.Scan() {
+			select {
+			case <-tick.C:
+				log.
+					WithField("enriched", c.Sent).
+					WithField("dropped", c.Dropped).
+					WithField("count", count).
+					Info("enrichment report")
+			default:
+			}
 			var e models.Entry
 			if err := models.Decoder.Unmarshal(scanner.Bytes(), &e); err != nil {
-				logrus.Fatal(err)
+				log.Fatal(err)
 			}
-			if err := c.Winlog(e); err != nil {
-				logrus.Error(err)
+			if err := c.Process(e); err != nil {
+				log.Error(err)
 			}
 			count++
 		}
 		if err := scanner.Err(); err != nil {
-			logrus.Fatal(err)
+			log.Fatal(err)
 		}
 	},
 }
