@@ -27,8 +27,9 @@ type Winlog struct {
 	window time.Duration
 
 	// general statistics
-	Sent    int
-	Dropped int
+	Enriched int
+	Sent     int
+	Dropped  int
 }
 
 func (c *Winlog) Enrichments() <-chan Enrichment {
@@ -57,7 +58,7 @@ func (c *Winlog) Process(e models.Entry) error {
 		var found bool
 		c.Buckets.Check(func(b *Bucket) error {
 			command, ok := b.CommandEvents[entityID]
-			if ok {
+			if !ok {
 				return nil
 			}
 			id, err := ne.CommunityID(c.CommunityID)
@@ -105,6 +106,7 @@ func (c *Winlog) Process(e models.Entry) error {
 }
 
 func (c *Winlog) send(e models.Entry, key string) {
+	c.Enriched++
 	select {
 	case c.enrichments <- Enrichment{
 		Entry: e,
