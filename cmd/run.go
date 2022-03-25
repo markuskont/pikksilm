@@ -37,9 +37,11 @@ var runCmd = &cobra.Command{
 			select {
 			case <-tick.C:
 				log.
-					WithField("enriched", c.Sent).
+					WithField("enriched", c.Enriched).
+					WithField("emitted", c.Sent).
 					WithField("dropped", c.Dropped).
 					WithField("count", count).
+					WithField("enriched_percent", float64(c.Enriched)/float64(count)).
 					Info("enrichment report")
 			default:
 			}
