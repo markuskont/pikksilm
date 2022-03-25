@@ -13,6 +13,8 @@ type BucketHandlerFunc func(*Bucket) error
 type Bucket struct {
 	// event_id 3 cache
 	NetworkEvents []models.NetworkEntry
+	// event_id 1 cache, uses GUID / entity_id as key
+	CommandEvents map[string]models.Entry
 	// Beginning of this bucket
 	Time time.Time
 }
@@ -21,6 +23,7 @@ func NewBucket(ts time.Time) *Bucket {
 	return &Bucket{
 		Time:          ts,
 		NetworkEvents: make([]models.NetworkEntry, 0),
+    CommandEvents: make(map[string]models.Entry),
 	}
 }
 

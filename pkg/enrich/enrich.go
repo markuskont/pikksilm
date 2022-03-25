@@ -8,40 +8,34 @@ import (
 	"github.com/satta/gommunityid"
 )
 
-type CommandItem struct {
-	Data       models.Entry
-	LastAccess time.Time
+type Enrichment struct {
+	Key   string
+	Entry models.Entry
 }
 
-type CommandCache map[string]*CommandItem
-
-func (c CommandCache) Check(id string) (models.Entry, bool) {
-	val, ok := c[id]
-	if !ok {
-		return nil, false
-	}
-	val.LastAccess = time.Now()
-	return val.Data, ok
-}
-
-type SimpleCache map[string]models.Entry
-
-// Correlate is handler for enrichment
-type Correlate struct {
-	CommandCache
+// Winlog is handler for enrichment
+type Winlog struct {
 	gommunityid.CommunityID
 
-	// Community ID lookup table of positive correlations
-	// TODO - make this a sharded pass to workers
-	Enrichments map[string]models.Entry
+	// Enrichments map[string]models.Entry
+	enrichments chan Enrichment
 
 	// Store network events that don't have a cmd yet
-	ConnectionCache *Buckets
+	Buckets *Buckets
 
+	// time window for lookups
 	window time.Duration
+
+	// general statistics
+	Sent    int
+	Dropped int
 }
 
-func (c *Correlate) Winlog(e models.Entry) error {
+func (c *Winlog) Enrichments() <-chan Enrichment {
+	return c.enrichments
+}
+
+func (c *Winlog) Process(e models.Entry) error {
 	entityID, ok := e.GetString("process", "entity_id")
 	if !ok {
 		return errors.New("entity id missing")
@@ -60,38 +54,46 @@ func (c *Correlate) Winlog(e models.Entry) error {
 			return err
 		}
 
-		// we expect potentially a lot of network events per one command
-		command, ok := c.CommandCache.Check(entityID)
-		if !ok {
-			return c.ConnectionCache.Insert(func(b *Bucket) error {
+		var found bool
+		c.Buckets.Check(func(b *Bucket) error {
+			command, ok := b.CommandEvents[entityID]
+			if ok {
+				return nil
+			}
+			id, err := ne.CommunityID(c.CommunityID)
+			if err != nil {
+				return err
+			}
+			c.send(command, id)
+			found = true
+			return nil
+		}, c.window)
+
+		if !found {
+			return c.Buckets.Insert(func(b *Bucket) error {
 				b.NetworkEvents = append(b.NetworkEvents, *ne)
 				return nil
 			})
 		}
-
-		// FIXME - refactor repeat code
-		id, err := ne.CommunityID(c.CommunityID)
-		if err != nil {
-			return err
-		}
-		c.Enrichments[id] = command
 	case "1":
 		// command event
 		// we expect only one command event per entity id
-		c.CommandCache[entityID] = &CommandItem{Data: e}
+		c.Buckets.Insert(func(b *Bucket) error {
+			b.CommandEvents[entityID] = e
+			return nil
+		})
 		// now we should also do a lookup to see if any network events came before the command
-		c.ConnectionCache.Check(func(b *Bucket) error {
+		c.Buckets.Check(func(b *Bucket) error {
 			if len(b.NetworkEvents) == 0 {
 				return nil
 			}
 			for _, ne := range b.NetworkEvents {
 				if ne.GUID == entityID {
-					// FIXME - refactor repeat code
 					id, err := ne.CommunityID(c.CommunityID)
 					if err != nil {
 						return err
 					}
-					c.Enrichments[id] = e
+					c.send(e, id)
 				}
 			}
 			return nil
@@ -102,13 +104,25 @@ func (c *Correlate) Winlog(e models.Entry) error {
 	return nil
 }
 
+func (c *Winlog) send(e models.Entry, key string) {
+	select {
+	case c.enrichments <- Enrichment{
+		Entry: e,
+		Key:   key,
+	}:
+		c.Sent++
+	default:
+		c.Dropped++
+	}
+}
+
 type CorrelateConfig struct {
 	BucketCount  int
 	BucketSize   time.Duration
 	LookupWindow time.Duration
 }
 
-func NewCorrelate(c CorrelateConfig) (*Correlate, error) {
+func NewCorrelate(c CorrelateConfig) (*Winlog, error) {
 	cid, err := gommunityid.GetCommunityIDByVersion(1, 0)
 	if err != nil {
 		return nil, err
@@ -120,11 +134,10 @@ func NewCorrelate(c CorrelateConfig) (*Correlate, error) {
 	if c.LookupWindow == 0 {
 		return nil, errors.New("Lookup window missing")
 	}
-	return &Correlate{
-		CommandCache:    make(CommandCache),
-		CommunityID:     cid,
-		Enrichments:     make(map[string]models.Entry),
-		ConnectionCache: connCache,
-    window: c.LookupWindow,
+	return &Winlog{
+		CommunityID: cid,
+		Buckets:     connCache,
+		window:      c.LookupWindow,
+		enrichments: make(chan Enrichment),
 	}, nil
 }
