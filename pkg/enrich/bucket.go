@@ -43,9 +43,13 @@ type Buckets struct {
 	ccFunc ContainerCreateFunc
 }
 
-func (b *Buckets) Insert(fn BucketHandlerFunc) error {
-	b.tryRotate(time.Now())
+func (b *Buckets) insert(fn BucketHandlerFunc, ts time.Time) error {
+	b.tryRotate(ts)
 	return fn(&b.Buckets[len(b.Buckets)-1])
+}
+
+func (b *Buckets) InsertCurrent(fn BucketHandlerFunc) error {
+	return b.insert(fn, time.Now())
 }
 
 func (b *Buckets) Check(fn BucketHandlerFunc, window time.Duration) error {

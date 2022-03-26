@@ -46,7 +46,7 @@ func TestInsertCurrent(t *testing.T) {
 	)
 	assert.Nil(t, err)
 
-	b.Insert(func(b *Bucket) error {
+	b.InsertCurrent(func(b *Bucket) error {
 		data, ok := b.Data.(*WinlogData)
 		assert.True(t, ok)
 		data.NetworkEvents = append(data.NetworkEvents, models.NetworkEntry{
