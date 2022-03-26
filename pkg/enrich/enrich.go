@@ -75,7 +75,7 @@ func (c *Winlog) Process(e models.Entry) error {
 		}, c.window)
 
 		if !found {
-			return c.Buckets.Insert(func(b *Bucket) error {
+			return c.Buckets.InsertCurrent(func(b *Bucket) error {
 				data, ok := b.Data.(*WinlogData)
 				if !ok {
 					return errors.New("invalid bucket data type")
@@ -87,7 +87,7 @@ func (c *Winlog) Process(e models.Entry) error {
 	case "1":
 		// command event
 		// we expect only one command event per entity id
-		c.Buckets.Insert(func(b *Bucket) error {
+		c.Buckets.InsertCurrent(func(b *Bucket) error {
 			data, ok := b.Data.(*WinlogData)
 			if !ok {
 				return errors.New("invalid bucket data type")
