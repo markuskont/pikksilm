@@ -10,7 +10,7 @@ import (
 )
 
 func TestBucket(t *testing.T) {
-	b, err := NewBuckets(3, 5*time.Second)
+	b, err := newBuckets(bucketsConfig{Count: 3, Size: 5 * time.Second})
 	assert.Nil(t, err)
 
 	ts, err := time.Parse(time.RFC3339, "2021-12-04T11:10:45.736Z")
@@ -32,19 +32,31 @@ func TestBucket(t *testing.T) {
 	assert.Equal(t, 3, len(b.Buckets))
 }
 
-func TestInsert(t *testing.T) {
-	b, err := NewBuckets(3, 5*time.Second)
+func TestInsertCurrent(t *testing.T) {
+	b, err := newBuckets(
+		bucketsConfig{
+			Count: 3,
+			Size:  5 * time.Second,
+			ContainerCreateFunc: func() any {
+				return &WinlogData{
+					NetworkEvents: make([]models.NetworkEntry, 0),
+				}
+			},
+		},
+	)
 	assert.Nil(t, err)
 
 	b.Insert(func(b *Bucket) error {
-		b.NetworkEvents = append(b.NetworkEvents, models.NetworkEntry{
+		data, ok := b.Data.(*WinlogData)
+		assert.True(t, ok)
+		data.NetworkEvents = append(data.NetworkEvents, models.NetworkEntry{
 			SrcIP: net.ParseIP("1.2.3.4"),
 		})
-		b.NetworkEvents = append(b.NetworkEvents, models.NetworkEntry{
+		data.NetworkEvents = append(data.NetworkEvents, models.NetworkEntry{
 			SrcIP: net.ParseIP("5.6.7.8"),
 		})
 		return nil
 	})
-	assert.Equal(t, "1.2.3.4", b.Buckets[0].NetworkEvents[0].SrcIP.String())
-	assert.Equal(t, "5.6.7.8", b.Buckets[0].NetworkEvents[1].SrcIP.String())
+	assert.Equal(t, "1.2.3.4", b.Buckets[0].Data.(*WinlogData).NetworkEvents[0].SrcIP.String())
+	assert.Equal(t, "5.6.7.8", b.Buckets[0].Data.(*WinlogData).NetworkEvents[1].SrcIP.String())
 }
