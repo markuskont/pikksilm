@@ -52,8 +52,7 @@ func (b *Buckets) InsertCurrent(fn BucketHandlerFunc) error {
 	return b.insert(fn, time.Now())
 }
 
-func (b *Buckets) Check(fn BucketHandlerFunc, window time.Duration) error {
-	ts := time.Now()
+func (b *Buckets) check(fn BucketHandlerFunc, window time.Duration, ts time.Time) error {
 	for i, bucket := range b.Buckets {
 		if end := bucket.Time.Add(b.size); end.After(ts.Add(-1 * window)) {
 			if err := fn(&b.Buckets[i]); err != nil {
@@ -62,6 +61,10 @@ func (b *Buckets) Check(fn BucketHandlerFunc, window time.Duration) error {
 		}
 	}
 	return nil
+}
+
+func (b *Buckets) Check(fn BucketHandlerFunc, window time.Duration) error {
+	return b.check(fn, window, time.Now())
 }
 
 func (b *Buckets) tryRotate(ts time.Time) {
