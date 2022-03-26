@@ -9,22 +9,26 @@ import (
 )
 
 type BucketHandlerFunc func(*Bucket) error
+type ContainerCreateFunc func() any
+
+type WinlogData struct {
+	// NetworkEvents is a list of 5-tuples + GUID we cache in case they were seen before the command
+	NetworkEvents []models.NetworkEntry
+	// CommandEvents is a lookuptable of GUID to event_id 1 entry, assuming we only see one cmd per GUID
+	CommandEvents map[string]models.Entry
+}
 
 type Bucket struct {
-	// event_id 3 cache
-	NetworkEvents []models.NetworkEntry
-	// event_id 1 cache, uses GUID / entity_id as key
-	CommandEvents map[string]models.Entry
-	// Beginning of this bucket
+	Data any
 	Time time.Time
 }
 
-func NewBucket(ts time.Time) *Bucket {
-	return &Bucket{
-		Time:          ts,
-		NetworkEvents: make([]models.NetworkEntry, 0),
-    CommandEvents: make(map[string]models.Entry),
+func NewBucket(ts time.Time, fn ContainerCreateFunc) *Bucket {
+	b := &Bucket{Time: ts}
+	if fn != nil {
+		b.Data = fn()
 	}
+	return b
 }
 
 type Buckets struct {
@@ -35,6 +39,8 @@ type Buckets struct {
 
 	first   time.Time
 	current time.Time
+
+	ccFunc ContainerCreateFunc
 }
 
 func (b *Buckets) Insert(fn BucketHandlerFunc) error {
@@ -59,7 +65,7 @@ func (b *Buckets) tryRotate(ts time.Time) {
 	if b.current.IsZero() || b.rollover(ts) {
 		b.current = ts.Truncate(b.size)
 		b.first = b.current
-		b.Buckets = append(b.Buckets, *NewBucket(b.current))
+		b.Buckets = append(b.Buckets, *NewBucket(b.current, b.ccFunc))
 	}
 	// truncate bucket set in case current count is above max
 	if current := len(b.Buckets); current > 1 && current > b.count {
@@ -72,16 +78,26 @@ func (b Buckets) rollover(ts time.Time) bool {
 	return since > b.size
 }
 
-func NewBuckets(count int, size time.Duration) (*Buckets, error) {
-	if count < 1 {
-		return nil, fmt.Errorf("invalid bucket count %d", count)
+type bucketsConfig struct {
+	// TODO - would be more intuitive if this was actuall calculated from global duration
+	Count int
+	// Size for single bucket
+	Size time.Duration
+	// ContainerCreateFunc can be nil, in that case user is responsible for checking that b.Data is not nil
+	ContainerCreateFunc ContainerCreateFunc
+}
+
+func newBuckets(c bucketsConfig) (*Buckets, error) {
+	if c.Count < 1 {
+		return nil, fmt.Errorf("invalid bucket count %d", c.Count)
 	}
-	if size == 0 {
+	if c.Size == 0 {
 		return nil, errors.New("empty bucket size")
 	}
 	return &Buckets{
-		Buckets: make([]Bucket, 0, count),
-		size:    size,
-		count:   count,
+		Buckets: make([]Bucket, 0, c.Count),
+		size:    c.Size,
+		count:   c.Count,
+		ccFunc:  c.ContainerCreateFunc,
 	}, nil
 }

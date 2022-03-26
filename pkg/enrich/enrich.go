@@ -57,7 +57,11 @@ func (c *Winlog) Process(e models.Entry) error {
 
 		var found bool
 		c.Buckets.Check(func(b *Bucket) error {
-			command, ok := b.CommandEvents[entityID]
+			data, ok := b.Data.(*WinlogData)
+			if !ok {
+				return errors.New("invalid bucket data type")
+			}
+			command, ok := data.CommandEvents[entityID]
 			if !ok {
 				return nil
 			}
@@ -72,7 +76,11 @@ func (c *Winlog) Process(e models.Entry) error {
 
 		if !found {
 			return c.Buckets.Insert(func(b *Bucket) error {
-				b.NetworkEvents = append(b.NetworkEvents, *ne)
+				data, ok := b.Data.(*WinlogData)
+				if !ok {
+					return errors.New("invalid bucket data type")
+				}
+				data.NetworkEvents = append(data.NetworkEvents, *ne)
 				return nil
 			})
 		}
@@ -80,15 +88,23 @@ func (c *Winlog) Process(e models.Entry) error {
 		// command event
 		// we expect only one command event per entity id
 		c.Buckets.Insert(func(b *Bucket) error {
-			b.CommandEvents[entityID] = e
+			data, ok := b.Data.(*WinlogData)
+			if !ok {
+				return errors.New("invalid bucket data type")
+			}
+			data.CommandEvents[entityID] = e
 			return nil
 		})
 		// now we should also do a lookup to see if any network events came before the command
 		c.Buckets.Check(func(b *Bucket) error {
-			if len(b.NetworkEvents) == 0 {
+			data, ok := b.Data.(*WinlogData)
+			if !ok {
+				return errors.New("invalid bucket data type")
+			}
+			if len(data.NetworkEvents) == 0 {
 				return nil
 			}
-			for _, ne := range b.NetworkEvents {
+			for _, ne := range data.NetworkEvents {
 				if ne.GUID == entityID {
 					id, err := ne.CommunityID(c.CommunityID)
 					if err != nil {
@@ -118,18 +134,27 @@ func (c *Winlog) send(e models.Entry, key string) {
 	}
 }
 
-type CorrelateConfig struct {
+type WinlogConfig struct {
 	BucketCount  int
 	BucketSize   time.Duration
 	LookupWindow time.Duration
 }
 
-func NewCorrelate(c CorrelateConfig) (*Winlog, error) {
+func NewWinlog(c WinlogConfig) (*Winlog, error) {
 	cid, err := gommunityid.GetCommunityIDByVersion(1, 0)
 	if err != nil {
 		return nil, err
 	}
-	connCache, err := NewBuckets(c.BucketCount, c.BucketSize)
+	connCache, err := newBuckets(bucketsConfig{
+		Count: c.BucketCount,
+		Size:  c.BucketSize,
+		ContainerCreateFunc: func() any {
+			return &WinlogData{
+				NetworkEvents: make([]models.NetworkEntry, 0),
+				CommandEvents: make(map[string]models.Entry),
+			}
+		},
+	})
 	if err != nil {
 		return nil, err
 	}

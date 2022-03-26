@@ -20,7 +20,7 @@ var runCmd = &cobra.Command{
 
   pikksilm run`,
 	Run: func(cmd *cobra.Command, args []string) {
-		c, err := enrich.NewCorrelate(enrich.CorrelateConfig{
+		c, err := enrich.NewWinlog(enrich.WinlogConfig{
 			BucketCount:  viper.GetInt("run.buckets.count"),
 			BucketSize:   viper.GetDuration("run.buckets.size"),
 			LookupWindow: viper.GetDuration("run.buckets.lookup"),
