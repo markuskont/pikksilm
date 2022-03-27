@@ -21,9 +21,10 @@ var runCmd = &cobra.Command{
   pikksilm run`,
 	Run: func(cmd *cobra.Command, args []string) {
 		c, err := enrich.NewWinlog(enrich.WinlogConfig{
-			BucketCount:  viper.GetInt("run.buckets.count"),
-			BucketSize:   viper.GetDuration("run.buckets.size"),
-			LookupWindow: viper.GetDuration("run.buckets.lookup"),
+			BucketCount:    viper.GetInt("run.buckets.count"),
+			BucketSize:     viper.GetDuration("run.buckets.size"),
+			LookupWindow:   viper.GetDuration("run.buckets.lookup"),
+			StoreNetEvents: false,
 		})
 		if err != nil {
 			log.Fatal(err)
@@ -32,16 +33,11 @@ var runCmd = &cobra.Command{
 		scanner := bufio.NewScanner(r)
 		tick := time.NewTicker(3 * time.Second)
 		defer tick.Stop()
-		var count int
 		for scanner.Scan() {
 			select {
 			case <-tick.C:
 				log.
-					WithField("enriched", c.Enriched).
-					WithField("emitted", c.Sent).
-					WithField("dropped", c.Dropped).
-					WithField("count", count).
-					WithField("enriched_percent", float64(c.Enriched)/float64(count)).
+					WithFields(c.Stats.Fields()).
 					Info("enrichment report")
 			default:
 			}
@@ -52,7 +48,6 @@ var runCmd = &cobra.Command{
 			if err := c.Process(e); err != nil {
 				log.Error(err)
 			}
-			count++
 		}
 		if err := scanner.Err(); err != nil {
 			log.Fatal(err)

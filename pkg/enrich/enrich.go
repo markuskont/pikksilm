@@ -13,6 +13,31 @@ type Enrichment struct {
 	Entry models.Entry
 }
 
+type WinlogStats struct {
+	// general statistics
+	Enriched        int
+	Sent            int
+	Dropped         int
+	NetEventsStored int
+	NetEventsPopped int
+	CmdBucketMoves  int
+	Count           int
+	SeenGUID        map[string]bool
+}
+
+func (ws WinlogStats) Fields() map[string]any {
+	return map[string]any{
+		"enriched":          ws.Enriched,
+		"emitted":           ws.Sent,
+		"dropped":           ws.Dropped,
+		"count":             ws.Count,
+		"enriched_percent":  float64(ws.Enriched) / float64(ws.Count),
+		"net_events_stored": ws.NetEventsStored,
+		"net_events_popped": ws.NetEventsPopped,
+		"cmd_bucket_moves":  ws.CmdBucketMoves,
+	}
+}
+
 // Winlog is handler for enrichment
 type Winlog struct {
 	gommunityid.CommunityID
@@ -25,11 +50,11 @@ type Winlog struct {
 
 	// time window for lookups
 	window time.Duration
+	// weather to keep network events in buckets or not
+	// for potential out of order messages, is memory intentsive
+	storeNetEvents bool
 
-	// general statistics
-	Enriched int
-	Sent     int
-	Dropped  int
+	Stats WinlogStats
 }
 
 func (c *Winlog) Enrichments() <-chan Enrichment {
@@ -45,8 +70,7 @@ func (c *Winlog) Process(e models.Entry) error {
 	if !ok {
 		return errors.New("event id missing")
 	}
-	// current time is used as basis for all correlation ops
-	// now := time.Now()
+	c.Stats.Count++
 	switch eventID {
 	case "3":
 		// network event
@@ -55,6 +79,7 @@ func (c *Winlog) Process(e models.Entry) error {
 			return err
 		}
 
+		// check if we already have corresponding command event cached
 		var found bool
 		c.Buckets.Check(func(b *Bucket) error {
 			data, ok := b.Data.(*WinlogData)
@@ -71,10 +96,29 @@ func (c *Winlog) Process(e models.Entry) error {
 			}
 			c.send(command, id)
 			found = true
-			return nil
+			// command was already found in latest bucket, no need to move it
+			if c.Buckets.current.Equal(b.Time) {
+				return nil
+			}
+			// move command to latest bucket
+      // we might observe a heap of network events for single command (like beacons)
+			// don't want command to rotate while network activity is still active
+			delete(data.CommandEvents, entityID)
+			return c.Buckets.InsertCurrent(func(b *Bucket) error {
+				data, ok := b.Data.(*WinlogData)
+				if !ok {
+					return errors.New("invalid bucket data type")
+				}
+				data.CommandEvents[entityID] = command
+				c.Stats.CmdBucketMoves++
+				return nil
+			})
 		}, c.window)
 
-		if !found {
+		// TODO - this actually seems kinda pointless, maybe ditch this code path entirely
+		// if no corresponding command found, cache for out of order lookup
+		if !found && c.storeNetEvents {
+			c.Stats.NetEventsStored++
 			return c.Buckets.InsertCurrent(func(b *Bucket) error {
 				data, ok := b.Data.(*WinlogData)
 				if !ok {
@@ -95,26 +139,30 @@ func (c *Winlog) Process(e models.Entry) error {
 			data.CommandEvents[entityID] = e
 			return nil
 		})
-		// now we should also do a lookup to see if any network events came before the command
-		c.Buckets.Check(func(b *Bucket) error {
-			data, ok := b.Data.(*WinlogData)
-			if !ok {
-				return errors.New("invalid bucket data type")
-			}
-			if len(data.NetworkEvents) == 0 {
-				return nil
-			}
-			for _, ne := range data.NetworkEvents {
-				if ne.GUID == entityID {
-					id, err := ne.CommunityID(c.CommunityID)
-					if err != nil {
-						return err
-					}
-					c.send(e, id)
+		// TODO - this actually seems kinda pointless, maybe ditch this code path entirely
+		if c.storeNetEvents {
+			// now we should also do a lookup to see if any network events came before the command
+			return c.Buckets.Check(func(b *Bucket) error {
+				data, ok := b.Data.(*WinlogData)
+				if !ok {
+					return errors.New("invalid bucket data type")
 				}
-			}
-			return nil
-		}, c.window)
+				if len(data.NetworkEvents) == 0 {
+					return nil
+				}
+				for _, ne := range data.NetworkEvents {
+					if ne.GUID == entityID {
+						id, err := ne.CommunityID(c.CommunityID)
+						if err != nil {
+							return err
+						}
+						c.Stats.NetEventsPopped++
+						c.send(e, id)
+					}
+				}
+				return nil
+			}, c.window)
+		}
 	default:
 		return nil
 	}
@@ -122,22 +170,23 @@ func (c *Winlog) Process(e models.Entry) error {
 }
 
 func (c *Winlog) send(e models.Entry, key string) {
-	c.Enriched++
+	c.Stats.Enriched++
 	select {
 	case c.enrichments <- Enrichment{
 		Entry: e,
 		Key:   key,
 	}:
-		c.Sent++
+		c.Stats.Sent++
 	default:
-		c.Dropped++
+		c.Stats.Dropped++
 	}
 }
 
 type WinlogConfig struct {
-	BucketCount  int
-	BucketSize   time.Duration
-	LookupWindow time.Duration
+	BucketCount    int
+	BucketSize     time.Duration
+	LookupWindow   time.Duration
+	StoreNetEvents bool
 }
 
 func NewWinlog(c WinlogConfig) (*Winlog, error) {
@@ -162,9 +211,10 @@ func NewWinlog(c WinlogConfig) (*Winlog, error) {
 		return nil, errors.New("Lookup window missing")
 	}
 	return &Winlog{
-		CommunityID: cid,
-		Buckets:     connCache,
-		window:      c.LookupWindow,
-		enrichments: make(chan Enrichment),
+		CommunityID:    cid,
+		Buckets:        connCache,
+		window:         c.LookupWindow,
+		storeNetEvents: c.StoreNetEvents,
+		enrichments:    make(chan Enrichment),
 	}, nil
 }
