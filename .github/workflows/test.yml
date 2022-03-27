@@ -2,7 +2,7 @@ name: Test go code
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, next-* ]
   pull_request:
     branches: [ main ]
 
