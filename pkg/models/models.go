@@ -159,3 +159,10 @@ func ExtractNetworkEntry(e Entry, guid string) (*NetworkEntry, error) {
 		GUID:     guid,
 	}, nil
 }
+
+type ConfigRedisInstance struct {
+	Host     string
+	Database int
+	Key      string
+	Batch    int64
+}

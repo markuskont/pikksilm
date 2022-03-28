@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/markuskont/pikksilm/pkg/enrich"
+	"github.com/markuskont/pikksilm/pkg/models"
 	"github.com/markuskont/pikksilm/pkg/stream"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -34,8 +35,20 @@ var runCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := stream.ReadWinlogStdin(log, c); err != nil {
-			log.Fatal(err)
+		switch viper.GetString("run.stream.input") {
+		case "redis":
+			if err := stream.ReadWinlogRedis(log, c, models.ConfigRedisInstance{
+				Host:     viper.GetString("run.redis.host"),
+				Database: viper.GetInt("run.redis.winlog.db"),
+				Batch:    1000,
+				Key:      viper.GetString("run.redis.winlog.key"),
+			}); err != nil {
+				log.Fatal(err)
+			}
+		case "stdin":
+			if err := stream.ReadWinlogStdin(log, c); err != nil {
+				log.Fatal(err)
+			}
 		}
 	},
 }
@@ -72,4 +85,7 @@ func init() {
 
 	pFlags.Int("redis-wise-db", 0, "Redis database for WISE output")
 	viper.BindPFlag("run.redis.wise.db", pFlags.Lookup("redis-wise-db"))
+
+	pFlags.String("stream-input", "redis", "Redis, stdin")
+	viper.BindPFlag("run.stream.input", pFlags.Lookup("stream-input"))
 }
