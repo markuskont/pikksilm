@@ -52,7 +52,18 @@ func ReadWinlogRedis(log *logrus.Logger, w *enrich.Winlog, c models.ConfigRedisI
 	}
 	pipeline := rdb.Pipeline()
 	defer pipeline.Close()
+
+	tick := time.NewTicker(3 * time.Second)
+	defer tick.Stop()
+
 	for {
+		select {
+		case <-tick.C:
+			log.
+				WithFields(w.Stats.Fields()).
+				Info("enrichment report")
+		default:
+		}
 		data := pipeline.LRange(context.TODO(), c.Key, 0, c.Batch)
 		pipeline.LTrim(context.TODO(), c.Key, c.Batch, -1)
 		_, err := pipeline.Exec(context.TODO())

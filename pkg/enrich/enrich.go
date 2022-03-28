@@ -21,6 +21,8 @@ type WinlogStats struct {
 	NetEventsPopped int
 	CmdBucketMoves  int
 	Count           int
+	CountCommand    int
+	CountNetwork    int
 	SeenGUID        map[string]bool
 }
 
@@ -30,7 +32,9 @@ func (ws WinlogStats) Fields() map[string]any {
 		"emitted":           ws.Sent,
 		"dropped":           ws.Dropped,
 		"count":             ws.Count,
-		"enriched_percent":  float64(ws.Enriched) / float64(ws.Count),
+		"count_command":     ws.CountCommand,
+		"count_network":     ws.CountNetwork,
+		"enriched_percent":  float64(ws.Enriched) / float64(ws.CountNetwork),
 		"net_events_stored": ws.NetEventsStored,
 		"net_events_popped": ws.NetEventsPopped,
 		"cmd_bucket_moves":  ws.CmdBucketMoves,
@@ -72,6 +76,7 @@ func (c *Winlog) Process(e models.Entry) error {
 	c.Stats.Count++
 	switch eventID {
 	case "3":
+		c.Stats.CountNetwork++
 		entityID, ok := e.GetString("winlog", "event_data", "ProcessGuid")
 		if !ok {
 			entityID, ok = e.GetString("winlog", "event_data", "SourceProcessGUID")
@@ -138,6 +143,7 @@ func (c *Winlog) Process(e models.Entry) error {
 		}
 
 	case "1":
+		c.Stats.CountCommand++
 		entityID, ok := e.GetString("winlog", "event_data", "ProcessGuid")
 		if !ok {
 			return errors.New("entity id missing")
