@@ -209,6 +209,7 @@ type WinlogBucketsConfig struct {
 type WinlogConfig struct {
 	Buckets        WinlogBucketsConfig
 	StoreNetEvents bool
+	Destination    chan Enrichment
 }
 
 func NewWinlog(c WinlogConfig) (*Winlog, error) {
@@ -230,13 +231,18 @@ func NewWinlog(c WinlogConfig) (*Winlog, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Winlog{
+	w := &Winlog{
 		CommunityID: cid,
-		enrichments: make(chan Enrichment),
 		buckets: &winlogBuckets{
 			commands: commands,
 			network:  network,
 		},
 		storeNetEvents: c.StoreNetEvents,
-	}, nil
+	}
+	if c.Destination != nil {
+		w.enrichments = c.Destination
+	} else {
+		w.enrichments = make(chan Enrichment)
+	}
+	return w, nil
 }

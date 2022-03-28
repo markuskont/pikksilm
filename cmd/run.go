@@ -1,13 +1,17 @@
 package cmd
 
 import (
+	"context"
+	"fmt"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/markuskont/pikksilm/pkg/enrich"
 	"github.com/markuskont/pikksilm/pkg/models"
 	"github.com/markuskont/pikksilm/pkg/stream"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/sync/errgroup"
 )
 
 // runCmd represents the run command
@@ -19,36 +23,69 @@ var runCmd = &cobra.Command{
 
   pikksilm run`,
 	Run: func(cmd *cobra.Command, args []string) {
-		c, err := enrich.NewWinlog(enrich.WinlogConfig{
-			Buckets: enrich.WinlogBucketsConfig{
-				Command: enrich.BucketsConfig{
-					Count: viper.GetInt("run.buckets.cmd.count"),
-					Size:  viper.GetDuration("run.buckets.cmd.size"),
+		ch := make(chan enrich.Enrichment, 1000)
+		defer close(ch)
+
+		pool := errgroup.Group{}
+		pool.Go(func() error {
+			c, err := enrich.NewWinlog(enrich.WinlogConfig{
+				Buckets: enrich.WinlogBucketsConfig{
+					Command: enrich.BucketsConfig{
+						Count: viper.GetInt("run.buckets.cmd.count"),
+						Size:  viper.GetDuration("run.buckets.cmd.size"),
+					},
+					Network: enrich.BucketsConfig{
+						Count: viper.GetInt("run.buckets.net.count"),
+						Size:  viper.GetDuration("run.buckets.net.size"),
+					},
 				},
-				Network: enrich.BucketsConfig{
-					Count: viper.GetInt("run.buckets.net.count"),
-					Size:  viper.GetDuration("run.buckets.net.size"),
-				},
-			},
-			StoreNetEvents: viper.GetBool("run.buckets.net.enable"),
+				StoreNetEvents: viper.GetBool("run.buckets.net.enable"),
+				Destination:    ch,
+			})
+			if err != nil {
+				return err
+			}
+			switch viper.GetString("run.stream.input") {
+			case "redis":
+				if err := stream.ReadWinlogRedis(log, c, models.ConfigRedisInstance{
+					Host:     viper.GetString("run.redis.host"),
+					Database: viper.GetInt("run.redis.winlog.db"),
+					Batch:    1000,
+					Key:      viper.GetString("run.redis.winlog.key"),
+				}); err != nil {
+					return err
+				}
+			case "stdin":
+				if err := stream.ReadWinlogStdin(log, c); err != nil {
+					return err
+				}
+			}
+			return nil
 		})
-		if err != nil {
+		pool.Go(func() error {
+			rdb := redis.NewClient(&redis.Options{
+				Addr: viper.GetString("run.redis.host"),
+				DB:   viper.GetInt("run.redis.wise.db"),
+			})
+			if resp := rdb.Ping(context.TODO()); resp == nil {
+				return fmt.Errorf("Unable to ping redis at %s", viper.GetString("run.redis.host"))
+			}
+		loop:
+			for item := range ch {
+				encoded, err := models.Decoder.Marshal(item.Entry)
+				if err != nil {
+					log.Error(err)
+					continue loop
+				}
+				if rdb.Set(context.Background(), item.Key, encoded, 1*time.Minute).Err() != nil {
+					log.Error(err)
+					continue loop
+				}
+			}
+			return nil
+		})
+		if err := pool.Wait(); err != nil {
 			log.Fatal(err)
-		}
-		switch viper.GetString("run.stream.input") {
-		case "redis":
-			if err := stream.ReadWinlogRedis(log, c, models.ConfigRedisInstance{
-				Host:     viper.GetString("run.redis.host"),
-				Database: viper.GetInt("run.redis.winlog.db"),
-				Batch:    1000,
-				Key:      viper.GetString("run.redis.winlog.key"),
-			}); err != nil {
-				log.Fatal(err)
-			}
-		case "stdin":
-			if err := stream.ReadWinlogStdin(log, c); err != nil {
-				log.Fatal(err)
-			}
 		}
 	},
 }
@@ -83,7 +120,7 @@ func init() {
 	pFlags.String("redis-winlog-key", "winlogbeat", "Key to consume windows logs from")
 	viper.BindPFlag("run.redis.winlog.key", pFlags.Lookup("redis-winlog-key"))
 
-	pFlags.Int("redis-wise-db", 0, "Redis database for WISE output")
+	pFlags.Int("redis-wise-db", 1, "Redis database for WISE output")
 	viper.BindPFlag("run.redis.wise.db", pFlags.Lookup("redis-wise-db"))
 
 	pFlags.String("stream-input", "redis", "Redis, stdin")
