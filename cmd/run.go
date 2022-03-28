@@ -84,4 +84,16 @@ func init() {
 	pFlags.Bool("buckets-net-enable", true, "Enable network bucket collection. "+
 		"Good for out of order events. ")
 	viper.BindPFlag("run.buckets.net.enable", pFlags.Lookup("buckets-net-enable"))
+
+	pFlags.String("redis-host", "localhost:6379", "Host to redis instance.")
+	viper.BindPFlag("run.redis.host", pFlags.Lookup("redis-host"))
+
+	pFlags.Int("redis-winlog-db", 0, "Redis database for ingest events.")
+	viper.BindPFlag("run.redis.winlog.db", pFlags.Lookup("redis-winlog-db"))
+
+	pFlags.String("redis-winlog-key", "winlogbeat", "Key to consume windows logs from")
+	viper.BindPFlag("run.redis.winlog.key", pFlags.Lookup("redis-winlog-key"))
+
+	pFlags.Int("redis-wise-db", 0, "Redis database for WISE output")
+	viper.BindPFlag("run.redis.wise.db", pFlags.Lookup("redis-wise-db"))
 }
