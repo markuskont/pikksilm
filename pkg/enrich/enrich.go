@@ -231,5 +231,6 @@ func NewWinlog(c WinlogConfig) (*Winlog, error) {
 			commands: commands,
 			network:  network,
 		},
+		storeNetEvents: c.StoreNetEvents,
 	}, nil
 }
