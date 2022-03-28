@@ -1,12 +1,10 @@
 package cmd
 
 import (
-	"bufio"
-	"os"
 	"time"
 
 	"github.com/markuskont/pikksilm/pkg/enrich"
-	"github.com/markuskont/pikksilm/pkg/models"
+	"github.com/markuskont/pikksilm/pkg/stream"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -36,29 +34,7 @@ var runCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		r := os.Stdin
-		scanner := bufio.NewScanner(r)
-		tick := time.NewTicker(3 * time.Second)
-		defer tick.Stop()
-	loop:
-		for scanner.Scan() {
-			select {
-			case <-tick.C:
-				log.
-					WithFields(c.Stats.Fields()).
-					Info("enrichment report")
-			default:
-			}
-			var e models.Entry
-			if err := models.Decoder.Unmarshal(scanner.Bytes(), &e); err != nil {
-				log.Error(err)
-				continue loop
-			}
-			if err := c.Process(e); err != nil {
-				log.Error(err)
-			}
-		}
-		if err := scanner.Err(); err != nil {
+		if err := stream.ReadWinlogStdin(log, c); err != nil {
 			log.Fatal(err)
 		}
 	},
