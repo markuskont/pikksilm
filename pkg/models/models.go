@@ -169,3 +169,12 @@ type ConfigRedisInstance struct {
 	Key      string
 	Batch    int64
 }
+
+type WiseEntry struct {
+	ProcessName string `json:"processname"`
+	UserName    string `json:"username"`
+	HostName    string `json:"hostname"`
+	ProcessPid  int    `json:"processpid"`
+	HostIP      string `json:"hostip"`
+	HostMAC     string `json:"hostmac"`
+}
