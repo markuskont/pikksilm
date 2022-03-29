@@ -65,8 +65,9 @@ var runCmd = &cobra.Command{
 		})
 		pool.Go(func() error {
 			rdb := redis.NewClient(&redis.Options{
-				Addr: viper.GetString("run.redis.host"),
-				DB:   viper.GetInt("run.redis.wise.db"),
+				Addr:     viper.GetString("run.redis.host"),
+				DB:       viper.GetInt("run.redis.wise.db"),
+				Password: viper.GetString("run.redis.password"),
 			})
 			if resp := rdb.Ping(context.TODO()); resp == nil {
 				return fmt.Errorf("Unable to ping redis at %s", viper.GetString("run.redis.host"))
