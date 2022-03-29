@@ -62,12 +62,9 @@ func (c *Winlog) Enrichments() <-chan Enrichment {
 }
 
 func (c *Winlog) Process(e models.Entry) error {
-	provider, ok := e.GetString("event", "provider")
+	entityID, ok := e.GetString("process", "entity_id")
 	if !ok {
-		return errors.New("event provider missing")
-	}
-	if provider != "Microsoft-Windows-Sysmon" {
-		return nil
+		return errors.New("entity id missing")
 	}
 	eventID, ok := e.GetString("winlog", "event_id")
 	if !ok {
@@ -76,14 +73,6 @@ func (c *Winlog) Process(e models.Entry) error {
 	c.Stats.Count++
 	switch eventID {
 	case "3":
-		c.Stats.CountNetwork++
-		entityID, ok := e.GetString("winlog", "event_data", "ProcessGuid")
-		if !ok {
-			entityID, ok = e.GetString("winlog", "event_data", "SourceProcessGUID")
-			if !ok {
-				return errors.New("entity id missing")
-			}
-		}
 		// network event
 		ne, err := models.ExtractNetworkEntry(e, entityID)
 		if err != nil {
@@ -143,11 +132,6 @@ func (c *Winlog) Process(e models.Entry) error {
 		}
 
 	case "1":
-		c.Stats.CountCommand++
-		entityID, ok := e.GetString("winlog", "event_data", "ProcessGuid")
-		if !ok {
-			return errors.New("entity id missing")
-		}
 		// command event
 		// we expect only one command event per entity id
 		c.buckets.commands.InsertCurrent(func(b *Bucket) error {

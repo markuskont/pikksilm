@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strconv"
 	"time"
 
 	jsoniter "github.com/json-iterator/go"
@@ -105,30 +104,28 @@ func (n NetworkEntry) CommunityID(cid gommunityid.CommunityID) (string, error) {
 }
 
 func ExtractNetworkEntry(e Entry, guid string) (*NetworkEntry, error) {
-	proto, ok := e.GetString("winlog", "event_data", "Protocol")
+	proto, ok := e.GetString("network", "transport")
 	if !ok {
 		return nil, errors.New("missing transport")
 	}
 
-	srcPort, ok := e.GetString("winlog", "event_data", "SourcePort")
+	srcPort, ok := e.GetNumber("source", "port")
 	if !ok {
 		return nil, errors.New("missing source port")
 	}
-	parsedSrcPort, err := strconv.Atoi(srcPort)
-	if err != nil {
-		return nil, fmt.Errorf("invalid source port %s", srcPort)
+	if srcPort < 0 {
+		return nil, fmt.Errorf("invalid port %v", srcPort)
 	}
 
-	destPort, ok := e.GetString("winlog", "event_data", "DestinationPort")
+	destPort, ok := e.GetNumber("destination", "port")
 	if !ok {
 		return nil, errors.New("missing destination port")
 	}
-	parsedDestPort, err := strconv.Atoi(destPort)
-	if err != nil {
-		return nil, fmt.Errorf("invalid destination port %s", srcPort)
+	if destPort < 0 {
+		return nil, fmt.Errorf("invalid port %v", destPort)
 	}
 
-	srcIP, ok := e.GetString("winlog", "event_data", "SourceIp")
+	srcIP, ok := e.GetString("source", "ip")
 	if !ok {
 		return nil, errors.New("missing source IP")
 	}
@@ -137,7 +134,7 @@ func ExtractNetworkEntry(e Entry, guid string) (*NetworkEntry, error) {
 		return nil, fmt.Errorf("invalid IP %v", parsedSrcIP)
 	}
 
-	destIP, ok := e.GetString("winlog", "event_data", "DestinationIp")
+	destIP, ok := e.GetString("destination", "ip")
 	if !ok {
 		return nil, errors.New("missing destination IP")
 	}
@@ -156,8 +153,8 @@ func ExtractNetworkEntry(e Entry, guid string) (*NetworkEntry, error) {
 	return &NetworkEntry{
 		Proto:    proto,
 		SrcIP:    parsedSrcIP,
-		SrcPort:  uint16(parsedSrcPort),
-		DestPort: uint16(parsedDestPort),
+		SrcPort:  uint16(srcPort),
+		DestPort: uint16(destPort),
 		DestIP:   parsedDestIP,
 		GUID:     guid,
 	}, nil
