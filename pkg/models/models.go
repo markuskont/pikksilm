@@ -165,6 +165,7 @@ type ConfigRedisInstance struct {
 	Database int
 	Key      string
 	Batch    int64
+	Password string
 }
 
 type WiseEntry struct {

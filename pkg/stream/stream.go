@@ -44,8 +44,9 @@ func ReadWinlogRedis(log *logrus.Logger, w *enrich.Winlog, c models.ConfigRedisI
 		return errors.New("winlog redis batch size not configured")
 	}
 	rdb := redis.NewClient(&redis.Options{
-		Addr: c.Host,
-		DB:   c.Database,
+		Addr:     c.Host,
+		DB:       c.Database,
+		Password: c.Password,
 	})
 	if resp := rdb.Ping(context.TODO()); resp == nil {
 		return fmt.Errorf("Unable to ping redis at %s", c.Host)

@@ -52,6 +52,7 @@ var runCmd = &cobra.Command{
 					Database: viper.GetInt("run.redis.winlog.db"),
 					Batch:    1000,
 					Key:      viper.GetString("run.redis.winlog.key"),
+					Password: viper.GetString("run.redis.password"),
 				}); err != nil {
 					return err
 				}
@@ -113,6 +114,9 @@ func init() {
 
 	pFlags.String("redis-host", "localhost:6379", "Host to redis instance.")
 	viper.BindPFlag("run.redis.host", pFlags.Lookup("redis-host"))
+
+	pFlags.String("redis-password", "", "Redis password")
+	viper.BindPFlag("run.redis.password", pFlags.Lookup("redis-password"))
 
 	pFlags.Int("redis-winlog-db", 0, "Redis database for ingest events.")
 	viper.BindPFlag("run.redis.winlog.db", pFlags.Lookup("redis-winlog-db"))
