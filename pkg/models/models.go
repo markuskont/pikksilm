@@ -17,6 +17,35 @@ const ArgTimeFormat = "2006-01-02 15:04:05"
 // Entry is a nested map with helper methods for recursive lookups
 type Entry map[string]any
 
+func (d Entry) Set(value any, key ...string) error {
+	if len(key) == 0 {
+		return nil
+	}
+	if len(key) == 1 {
+		d[key[0]] = value
+	} else {
+		val, ok := d[key[0]]
+		if ok {
+			switch res := val.(type) {
+			case map[string]any:
+				// recurse into existing map
+				return Entry(res).Set(value, key[1:]...)
+			case Entry:
+				// recurse into existing map
+				return res.Set(value, key[1:]...)
+			default:
+				e := Entry{}
+				d[key[0]] = e
+				return e.Set(value, key[1:]...)
+			}
+		}
+		e := Entry{}
+		d[key[0]] = e
+		return e.Set(value, key[1:]...)
+	}
+	return nil
+}
+
 // Get is a helper for doing recursive lookups into nested maps (nested JSON). Key argument is a
 // slice of strings
 func (d Entry) Get(key ...string) (any, bool) {
@@ -25,6 +54,13 @@ func (d Entry) Get(key ...string) (any, bool) {
 	}
 	if val, ok := d[key[0]]; ok {
 		switch res := val.(type) {
+		case Entry:
+			// key has only one item, user wants the map itselt, not subelement
+			if len(key) == 1 {
+				return res, ok
+			}
+			// recurse with key remainder
+			return res.Get(key[1:]...)
 		case map[string]any:
 			// key has only one item, user wants the map itselt, not subelement
 			if len(key) == 1 {
