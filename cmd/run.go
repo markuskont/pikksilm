@@ -79,7 +79,7 @@ var runCmd = &cobra.Command{
 					log.Error(err)
 					continue loop
 				}
-				if rdb.Set(context.Background(), item.Key, encoded, 1*time.Minute).Err() != nil {
+				if err := rdb.LPush(context.Background(), item.Key, encoded).Err(); err != nil {
 					log.Error(err)
 					continue loop
 				}
