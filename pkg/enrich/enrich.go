@@ -94,6 +94,7 @@ func (c *Winlog) Process(e models.Entry) error {
 			if err != nil {
 				return err
 			}
+			command.Set(id, "network", "community_id")
 			c.send(command, id)
 			found = true
 			// command was already found in latest bucket, no need to move it
@@ -160,6 +161,7 @@ func (c *Winlog) Process(e models.Entry) error {
 							return err
 						}
 						c.Stats.NetEventsPopped++
+						e.Set(id, "network", "community_id")
 						c.send(e, id)
 					}
 				}
