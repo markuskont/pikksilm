@@ -2,6 +2,7 @@ package enrich
 
 import (
 	"errors"
+	"path"
 
 	"github.com/markuskont/pikksilm/pkg/models"
 	"github.com/satta/gommunityid"
@@ -50,6 +51,8 @@ type Winlog struct {
 
 	buckets *winlogBuckets
 
+	persistCommand string
+
 	// weather to keep network events in buckets or not
 	// for potential out of order messages, is memory intentsive
 	storeNetEvents bool
@@ -57,9 +60,20 @@ type Winlog struct {
 	Stats WinlogStats
 }
 
+func (c *Winlog) Close() error {
+	if c.persistCommand != "" {
+		if err := dumpBucketPersist(c.persistCommand, *c.buckets.commands); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *Winlog) Enrichments() <-chan Enrichment {
 	return c.enrichments
 }
+
+func (c Winlog) CmdLen() int { return len(c.buckets.commands.Buckets) }
 
 func (c *Winlog) Process(e models.Entry) error {
 	entityID, ok := e.GetString("process", "entity_id")
@@ -98,7 +112,7 @@ func (c *Winlog) Process(e models.Entry) error {
 			c.send(command, id)
 			found = true
 			// command was already found in latest bucket, no need to move it
-			if c.buckets.commands.current.Equal(b.Time) {
+			if c.buckets.commands.Current.Equal(b.Time) {
 				return nil
 			}
 			// move command to latest bucket
@@ -195,6 +209,7 @@ type WinlogBucketsConfig struct {
 type WinlogConfig struct {
 	Buckets        WinlogBucketsConfig
 	StoreNetEvents bool
+	WorkDir        string
 	Destination    chan Enrichment
 }
 
@@ -203,9 +218,19 @@ func NewWinlog(c WinlogConfig) (*Winlog, error) {
 	if err != nil {
 		return nil, err
 	}
+	w := &Winlog{
+		CommunityID:    cid,
+		storeNetEvents: c.StoreNetEvents,
+	}
+
+	if c.WorkDir != "" {
+		w.persistCommand = path.Join(c.WorkDir, "event_id_1.gob")
+	}
+
 	commands, err := newBuckets(bucketsConfig{
 		BucketsConfig:       c.Buckets.Command,
 		ContainerCreateFunc: func() any { return make(CommandEvents) },
+		Persist:             w.persistCommand,
 	})
 	if err != nil {
 		return nil, err
@@ -217,14 +242,11 @@ func NewWinlog(c WinlogConfig) (*Winlog, error) {
 	if err != nil {
 		return nil, err
 	}
-	w := &Winlog{
-		CommunityID: cid,
-		buckets: &winlogBuckets{
-			commands: commands,
-			network:  network,
-		},
-		storeNetEvents: c.StoreNetEvents,
+	w.buckets = &winlogBuckets{
+		network:  network,
+		commands: commands,
 	}
+
 	if c.Destination != nil {
 		w.enrichments = c.Destination
 	} else {

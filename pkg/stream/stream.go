@@ -14,32 +14,43 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func ReadWinlogStdin(log *logrus.Logger, w *enrich.Winlog) error {
+func ReadWinlogStdin(
+	ctx context.Context,
+	log *logrus.Logger,
+	w *enrich.Winlog,
+) error {
 	scanner := bufio.NewScanner(os.Stdin)
 	tick := time.NewTicker(3 * time.Second)
 	defer tick.Stop()
 loop:
 	for scanner.Scan() {
 		select {
+		case <-ctx.Done():
+			break loop
 		case <-tick.C:
 			log.
 				WithFields(w.Stats.Fields()).
 				Info("enrichment report")
 		default:
-		}
-		var e models.Entry
-		if err := models.Decoder.Unmarshal(scanner.Bytes(), &e); err != nil {
-			log.Error(err)
-			continue loop
-		}
-		if err := w.Process(e); err != nil {
-			log.Error(err)
+			var e models.Entry
+			if err := models.Decoder.Unmarshal(scanner.Bytes(), &e); err != nil {
+				log.Error(err)
+				continue loop
+			}
+			if err := w.Process(e); err != nil {
+				log.Error(err)
+			}
 		}
 	}
 	return scanner.Err()
 }
 
-func ReadWinlogRedis(log *logrus.Logger, w *enrich.Winlog, c models.ConfigRedisInstance) error {
+func ReadWinlogRedis(
+	ctx context.Context,
+	log *logrus.Logger,
+	w *enrich.Winlog,
+	c models.ConfigRedisInstance,
+) error {
 	if c.Batch == 0 {
 		return errors.New("winlog redis batch size not configured")
 	}
@@ -57,36 +68,39 @@ func ReadWinlogRedis(log *logrus.Logger, w *enrich.Winlog, c models.ConfigRedisI
 	tick := time.NewTicker(3 * time.Second)
 	defer tick.Stop()
 
+outer:
 	for {
 		select {
 		case <-tick.C:
 			log.
 				WithFields(w.Stats.Fields()).
 				Info("enrichment report")
+		case <-ctx.Done():
+			break outer
 		default:
-		}
-		data := pipeline.LRange(context.TODO(), c.Key, 0, c.Batch)
-		pipeline.LTrim(context.TODO(), c.Key, c.Batch, -1)
-		_, err := pipeline.Exec(context.TODO())
-		if err != nil {
-			return err
-		}
-		result, err := data.Result()
-		if err != nil {
-			return err
-		}
-		if len(result) == 0 {
-			time.Sleep(100 * time.Microsecond)
-		}
-	loop:
-		for _, item := range result {
-			var e models.Entry
-			if err := models.Decoder.Unmarshal([]byte(item), &e); err != nil {
-				log.Error(err)
-				continue loop
+			data := pipeline.LRange(context.TODO(), c.Key, 0, c.Batch)
+			pipeline.LTrim(context.TODO(), c.Key, c.Batch, -1)
+			_, err := pipeline.Exec(context.TODO())
+			if err != nil {
+				return err
 			}
-			if err := w.Process(e); err != nil {
-				log.Error(err)
+			result, err := data.Result()
+			if err != nil {
+				return err
+			}
+			if len(result) == 0 {
+				time.Sleep(100 * time.Microsecond)
+			}
+		loop:
+			for _, item := range result {
+				var e models.Entry
+				if err := models.Decoder.Unmarshal([]byte(item), &e); err != nil {
+					log.Error(err)
+					continue loop
+				}
+				if err := w.Process(e); err != nil {
+					log.Error(err)
+				}
 			}
 		}
 	}

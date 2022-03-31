@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -23,11 +25,22 @@ var runCmd = &cobra.Command{
 
   pikksilm run`,
 	Run: func(cmd *cobra.Command, args []string) {
+		defer func() {
+			log.Info("good exit")
+		}()
 		ch := make(chan enrich.Enrichment, 1000)
-		defer close(ch)
+		ctx, stop := context.WithCancel(context.Background())
 
 		pool := errgroup.Group{}
 		pool.Go(func() error {
+			ch := make(chan os.Signal, 1)
+			signal.Notify(ch, os.Interrupt)
+			<-ch
+			stop()
+			return nil
+		})
+		pool.Go(func() error {
+			defer close(ch)
 			c, err := enrich.NewWinlog(enrich.WinlogConfig{
 				Buckets: enrich.WinlogBucketsConfig{
 					Command: enrich.BucketsConfig{
@@ -41,13 +54,18 @@ var runCmd = &cobra.Command{
 				},
 				StoreNetEvents: viper.GetBool("run.buckets.net.enable"),
 				Destination:    ch,
+				WorkDir:        viper.GetString("run.dir.dump"),
 			})
 			if err != nil {
 				return err
 			}
+			log.
+				WithField("cmd_buckets_loaded", c.CmdLen()).
+				Info("winlog handler started")
+
 			switch viper.GetString("run.stream.input") {
 			case "redis":
-				if err := stream.ReadWinlogRedis(log, c, models.ConfigRedisInstance{
+				if err := stream.ReadWinlogRedis(ctx, log, c, models.ConfigRedisInstance{
 					Host:     viper.GetString("run.redis.host"),
 					Database: viper.GetInt("run.redis.winlog.db"),
 					Batch:    1000,
@@ -57,11 +75,11 @@ var runCmd = &cobra.Command{
 					return err
 				}
 			case "stdin":
-				if err := stream.ReadWinlogStdin(log, c); err != nil {
+				if err := stream.ReadWinlogStdin(ctx, log, c); err != nil {
 					return err
 				}
 			}
-			return nil
+			return c.Close()
 		})
 		pool.Go(func() error {
 			rdb := redis.NewClient(&redis.Options{
@@ -96,6 +114,9 @@ func init() {
 	rootCmd.AddCommand(runCmd)
 
 	pFlags := runCmd.PersistentFlags()
+
+	pFlags.String("dir-dump", "", "Directory to store persistence")
+	viper.BindPFlag("run.dir.dump", pFlags.Lookup("dir-dump"))
 
 	pFlags.Int("buckets-cmd-count", 3, "Number of command event cache buckets")
 	viper.BindPFlag("run.buckets.cmd.count", pFlags.Lookup("buckets-cmd-count"))
