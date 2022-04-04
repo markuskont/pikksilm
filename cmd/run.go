@@ -33,6 +33,7 @@ var runCmd = &cobra.Command{
 		ctx, stop := context.WithCancel(context.Background())
 
 		pool := errgroup.Group{}
+		// worker to handle system signals
 		pool.Go(func() error {
 			ch := make(chan os.Signal, 1)
 			signal.Notify(ch, os.Interrupt)
@@ -40,6 +41,7 @@ var runCmd = &cobra.Command{
 			stop()
 			return nil
 		})
+		// worker to handle winlogbeat correlation
 		pool.Go(func() error {
 			defer close(ch)
 			c, err := enrich.NewWinlog(enrich.WinlogConfig{
@@ -82,6 +84,7 @@ var runCmd = &cobra.Command{
 			}
 			return c.Close()
 		})
+		// worker to push correlated items to WISE
 		pool.Go(func() error {
 			rdb := redis.NewClient(&redis.Options{
 				Addr:     viper.GetString("run.stream.wise.redis.host"),
