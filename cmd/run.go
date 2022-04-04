@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -84,6 +85,64 @@ var runCmd = &cobra.Command{
 			}
 			return c.Close()
 		})
+		var (
+			wiseCh chan enrich.Enrichment
+			suriCh chan enrich.Enrichment
+		)
+		if viper.GetBool("stream.suricata.enabled") {
+			wiseCh = make(chan enrich.Enrichment, 100)
+			suriCh = make(chan enrich.Enrichment, 100)
+			// worker to split enrichmetns between WISE and Suricata
+			pool.Go(func() error {
+				defer close(wiseCh)
+				defer close(suriCh)
+				for item := range ch {
+					wiseCh <- item
+					suriCh <- item
+				}
+				return nil
+			})
+			// worker to work on suricata events
+			pool.Go(func() error {
+				s, err := enrich.NewSuricata()
+				if err != nil {
+					return err
+				}
+			loop:
+				for {
+					select {
+					case enrichment, ok := <-suriCh:
+						if !ok {
+							break loop
+						}
+						s.Commands.InsertCurrent(func(b *enrich.Bucket) error {
+							data, ok := b.Data.(enrich.CommandEvents)
+							if !ok {
+								return errors.New("suricata handler cmd event insert wrong type")
+							}
+							data[enrichment.Key] = enrichment.Entry
+							return nil
+						})
+					default:
+						// FIXME - pipeline is not initialized at all!
+						if err := stream.RedisBatchConsume(nil, s, viper.GetString(
+							"run.stream.suricata_alert_source.redis.key",
+						), 100); err != nil {
+							log.Error(err)
+						}
+						if err := stream.RedisBatchConsume(nil, s, viper.GetString(
+							"run.stream.suricata_eve_source.redis.key",
+						), 100); err != nil {
+							log.Error(err)
+						}
+					}
+				}
+				return nil
+			})
+		} else {
+			// no need for split if suricata is not enabled
+			wiseCh = ch
+		}
 		// worker to push correlated items to WISE
 		pool.Go(func() error {
 			rdb := redis.NewClient(&redis.Options{
@@ -98,7 +157,7 @@ var runCmd = &cobra.Command{
 				)
 			}
 		loop:
-			for item := range ch {
+			for item := range wiseCh {
 				encoded, err := models.Decoder.Marshal(item.Entry)
 				if err != nil {
 					log.Error(err)
