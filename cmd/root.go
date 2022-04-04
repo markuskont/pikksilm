@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -71,6 +72,8 @@ func initConfig() {
 	}
 
 	viper.AutomaticEnv() // read in environment variables that match
+	viper.SetEnvPrefix("PIKKSILM")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
