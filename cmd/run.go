@@ -12,6 +12,7 @@ import (
 	"github.com/markuskont/pikksilm/pkg/models"
 	"github.com/markuskont/pikksilm/pkg/stream"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"golang.org/x/sync/errgroup"
 )
@@ -66,11 +67,11 @@ var runCmd = &cobra.Command{
 			switch viper.GetString("run.stream.input") {
 			case "redis":
 				if err := stream.ReadWinlogRedis(ctx, log, c, models.ConfigRedisInstance{
-					Host:     viper.GetString("run.redis.host"),
-					Database: viper.GetInt("run.redis.winlog.db"),
-					Batch:    1000,
-					Key:      viper.GetString("run.redis.winlog.key"),
-					Password: viper.GetString("run.redis.password"),
+					Host:     viper.GetString("run.stream.winlog.redis.host"),
+					Database: viper.GetInt("run.stream.winlog.redis.db"),
+					Batch:    100,
+					Key:      viper.GetString("run.stream.winlog.redis.key"),
+					Password: viper.GetString("run.stream.winlog.redis.password"),
 				}); err != nil {
 					return err
 				}
@@ -83,12 +84,15 @@ var runCmd = &cobra.Command{
 		})
 		pool.Go(func() error {
 			rdb := redis.NewClient(&redis.Options{
-				Addr:     viper.GetString("run.redis.host"),
-				DB:       viper.GetInt("run.redis.wise.db"),
-				Password: viper.GetString("run.redis.password"),
+				Addr:     viper.GetString("run.stream.wise.redis.host"),
+				Password: viper.GetString("run.stream.wise.redis.password"),
+				DB:       viper.GetInt("run.stream.wise.redis.db"),
 			})
 			if resp := rdb.Ping(context.TODO()); resp == nil {
-				return fmt.Errorf("Unable to ping redis at %s", viper.GetString("run.redis.host"))
+				return fmt.Errorf(
+					"Unable to ping redis at %s",
+					viper.GetString("run.stream.wise.redis.host"),
+				)
 			}
 		loop:
 			for item := range ch {
@@ -134,21 +138,37 @@ func init() {
 		"Good for out of order events. ")
 	viper.BindPFlag("run.buckets.net.enable", pFlags.Lookup("buckets-net-enable"))
 
-	pFlags.String("redis-host", "localhost:6379", "Host to redis instance.")
-	viper.BindPFlag("run.redis.host", pFlags.Lookup("redis-host"))
-
-	pFlags.String("redis-password", "", "Redis password")
-	viper.BindPFlag("run.redis.password", pFlags.Lookup("redis-password"))
-
-	pFlags.Int("redis-winlog-db", 0, "Redis database for ingest events.")
-	viper.BindPFlag("run.redis.winlog.db", pFlags.Lookup("redis-winlog-db"))
-
-	pFlags.String("redis-winlog-key", "winlogbeat", "Key to consume windows logs from")
-	viper.BindPFlag("run.redis.winlog.key", pFlags.Lookup("redis-winlog-key"))
-
-	pFlags.Int("redis-wise-db", 1, "Redis database for WISE output")
-	viper.BindPFlag("run.redis.wise.db", pFlags.Lookup("redis-wise-db"))
-
 	pFlags.String("stream-input", "redis", "Redis, stdin")
 	viper.BindPFlag("run.stream.input", pFlags.Lookup("stream-input"))
+
+	pFlags.Bool("stream-suricata", false, "Enable Suricata enrichment")
+	viper.BindPFlag("run.stream.suricata", pFlags.Lookup("stream-suricata"))
+
+	initLogStreamSectionRedis(pFlags, "winlog", 0, "winlogbeat")
+	initLogStreamSectionRedis(pFlags, "wise", 1, "NA")
+
+	initLogStreamSectionRedis(pFlags, "suricata_alert_source", 0, "eve_alert")
+	initLogStreamSectionRedis(pFlags, "suricata_eve_source", 0, "eve")
+
+	initLogStreamSectionRedis(pFlags, "suricata_alert_dest", 0, "eve_alert_enriched")
+	initLogStreamSectionRedis(pFlags, "suricata_eve_dest", 0, "eve_enriched")
+}
+
+func initLogStreamSectionRedis(
+	pFlags *pflag.FlagSet,
+	section string,
+	db int,
+	key string,
+) {
+	pFlags.String(section+"-redis-host", "localhost:6379", "Host to redis instance.")
+	viper.BindPFlag("run.stream."+section+".redis.host", pFlags.Lookup(section+"-redis-host"))
+
+	pFlags.String(section+"-redis-password", "", "Redis password.")
+	viper.BindPFlag("run.stream."+section+".redis.password", pFlags.Lookup(section+"-redis-password"))
+
+	pFlags.Int(section+"-redis-db", db, "Redis database.")
+	viper.BindPFlag("run.stream."+section+".redis.db", pFlags.Lookup(section+"-redis-db"))
+
+	pFlags.String(section+"-redis-key", key, "Redis queue key")
+	viper.BindPFlag("run.stream."+section+".redis.key", pFlags.Lookup(section+"-redis-key"))
 }
