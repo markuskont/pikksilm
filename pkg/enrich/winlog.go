@@ -37,6 +37,11 @@ func (ws WinlogStats) Fields() map[string]any {
 	}
 }
 
+type winlogBuckets struct {
+	network  *Buckets
+	commands *Buckets
+}
+
 // Winlog is handler for enrichment
 type Winlog struct {
 	gommunityid.CommunityID

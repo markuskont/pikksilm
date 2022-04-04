@@ -17,11 +17,6 @@ type ContainerCreateFunc func() any
 type NetworkEvents []models.NetworkEntry
 type CommandEvents map[string]models.Entry
 
-type winlogBuckets struct {
-	network  *Buckets
-	commands *Buckets
-}
-
 type Bucket struct {
 	Data any
 	Time time.Time
