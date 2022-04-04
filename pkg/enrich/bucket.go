@@ -45,8 +45,6 @@ type Buckets struct {
 	ccFunc ContainerCreateFunc
 }
 
-func (b *Buckets) setCCFunc(fn ContainerCreateFunc) { b.ccFunc = fn }
-
 func (b *Buckets) insert(fn BucketHandlerFunc, ts time.Time) error {
 	b.tryRotate(ts)
 	return fn(&b.Buckets[len(b.Buckets)-1])
@@ -114,7 +112,7 @@ func newBuckets(c bucketsConfig) (*Buckets, error) {
 	if c.Persist != "" {
 		_, err := os.Stat(c.Persist)
 		if !errors.Is(err, os.ErrNotExist) {
-			return readBucketPersist(c.Persist, c.ContainerCreateFunc)
+			return readCmdBucketData(c.Persist, c.ContainerCreateFunc)
 		}
 	}
 	return &Buckets{
@@ -140,8 +138,36 @@ func readBucketPersist(path string, ccFunc ContainerCreateFunc) (*Buckets, error
 	if err := json.NewDecoder(gr).Decode(&obj); err != nil {
 		return nil, err
 	}
-	obj.setCCFunc(ccFunc)
+	ptr := &obj
+	ptr.ccFunc = ccFunc
 	return &obj, nil
+}
+
+// decoded Buckets will be of type any, items need to be recast properly
+func castConcreteCmdEvents(buckets []Bucket) {
+	if len(buckets) == 0 {
+		return
+	}
+	for i, val := range buckets {
+		concrete := make(CommandEvents)
+		if cmd, ok := val.Data.(map[string]any); ok {
+			for k, v := range cmd {
+				if entry, ok := v.(map[string]any); ok {
+					concrete[k] = models.Entry(entry)
+				}
+			}
+		}
+		buckets[i].Data = concrete
+	}
+}
+
+func readCmdBucketData(path string, ccFunc ContainerCreateFunc) (*Buckets, error) {
+	b, err := readBucketPersist(path, ccFunc)
+	if err != nil {
+		return nil, err
+	}
+	castConcreteCmdEvents(b.Buckets)
+	return b, nil
 }
 
 func dumpBucketPersist(path string, b Buckets) error {
