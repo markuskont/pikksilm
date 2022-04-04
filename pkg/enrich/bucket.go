@@ -2,7 +2,7 @@ package enrich
 
 import (
 	"compress/gzip"
-	"encoding/gob"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -137,7 +137,7 @@ func readBucketPersist(path string, ccFunc ContainerCreateFunc) (*Buckets, error
 	}
 	defer gr.Close()
 	var obj Buckets
-	if err := gob.NewDecoder(gr).Decode(&obj); err != nil {
+	if err := json.NewDecoder(gr).Decode(&obj); err != nil {
 		return nil, err
 	}
 	obj.setCCFunc(ccFunc)
@@ -152,5 +152,5 @@ func dumpBucketPersist(path string, b Buckets) error {
 	defer f.Close()
 	gw := gzip.NewWriter(f)
 	defer gw.Close()
-	return gob.NewEncoder(gw).Encode(b)
+	return json.NewEncoder(gw).Encode(b)
 }
