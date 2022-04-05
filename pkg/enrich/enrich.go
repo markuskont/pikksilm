@@ -14,5 +14,5 @@ type Processor interface {
 }
 
 type EntriesCheker interface {
-  CheckEntries(Entries) error
+	CheckEntries(Entries) error
 }
