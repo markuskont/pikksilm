@@ -12,3 +12,7 @@ type Enrichment struct {
 type Processor interface {
 	Process(models.Entry) error
 }
+
+type EntriesCheker interface {
+  CheckEntries(Entries) error
+}

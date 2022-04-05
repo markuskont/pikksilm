@@ -14,8 +14,11 @@ import (
 type BucketHandlerFunc func(*Bucket) error
 type ContainerCreateFunc func() any
 
+type Entries []models.Entry
 type NetworkEvents []models.NetworkEntry
 type CommandEvents map[string]models.Entry
+
+func newEntries() any { return make(Entries, 0) }
 
 type Bucket struct {
 	Data any
@@ -37,15 +40,28 @@ type Buckets struct {
 	First   time.Time
 	Current time.Time
 
-	ccFunc ContainerCreateFunc
+	// execute this function whenever new bucket is created
+	// for initializing data container
+	onCreateFunc ContainerCreateFunc
 }
 
-func (b *Buckets) insert(fn BucketHandlerFunc, ts time.Time) error {
-	b.tryRotate(ts)
-	return fn(&b.Buckets[len(b.Buckets)-1])
+func (b *Buckets) insert(fn BucketHandlerFunc, ts time.Time) (*Bucket, error) {
+	rotated, err := b.tryRotate(ts)
+	if err != nil {
+		return rotated, err
+	}
+	return rotated, fn(&b.Buckets[len(b.Buckets)-1])
 }
 
 func (b *Buckets) InsertCurrent(fn BucketHandlerFunc) error {
+	_, err := b.InsertCurrentAndGetVal(fn)
+	return err
+}
+
+// InsertCurrentAndRetrieve wraps around InsertCurrent but returns dropped
+// bucket in case there was successful rotation. If nothing got rotated, then
+// first return value is nil.
+func (b *Buckets) InsertCurrentAndGetVal(fn BucketHandlerFunc) (*Bucket, error) {
 	return b.insert(fn, time.Now())
 }
 
@@ -62,17 +78,20 @@ func (b *Buckets) Check(fn BucketHandlerFunc) error {
 	return b.check(fn, time.Now())
 }
 
-func (b *Buckets) tryRotate(ts time.Time) {
+func (b *Buckets) tryRotate(ts time.Time) (*Bucket, error) {
 	// append new bucket in case period is exceeded
 	if b.Current.IsZero() || b.rollover(ts) {
 		b.Current = ts.Truncate(b.Size)
 		b.First = b.Current
-		b.Buckets = append(b.Buckets, *NewBucket(b.Current, b.ccFunc))
+		b.Buckets = append(b.Buckets, *NewBucket(b.Current, b.onCreateFunc))
 	}
 	// truncate bucket set in case current count is above max
 	if current := len(b.Buckets); current > 1 && current > b.Count {
+		rotated := b.Buckets[0]
 		b.Buckets = b.Buckets[1:]
+		return &rotated, nil
 	}
+	return nil, nil
 }
 
 func (b Buckets) rollover(ts time.Time) bool {
@@ -111,10 +130,10 @@ func newBuckets(c bucketsConfig) (*Buckets, error) {
 		}
 	}
 	return &Buckets{
-		Buckets: make([]Bucket, 0, c.Count),
-		Size:    c.Size,
-		Count:   c.Count,
-		ccFunc:  c.ContainerCreateFunc,
+		Buckets:      make([]Bucket, 0, c.Count),
+		Size:         c.Size,
+		Count:        c.Count,
+		onCreateFunc: c.ContainerCreateFunc,
 	}, nil
 }
 
@@ -134,7 +153,7 @@ func readBucketPersist(path string, ccFunc ContainerCreateFunc) (*Buckets, error
 		return nil, err
 	}
 	ptr := &obj
-	ptr.ccFunc = ccFunc
+	ptr.onCreateFunc = ccFunc
 	return &obj, nil
 }
 

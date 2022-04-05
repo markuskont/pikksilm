@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -107,10 +108,6 @@ var runCmd = &cobra.Command{
 			})
 			// worker to work on suricata events
 			pool.Go(func() error {
-				s, err := enrich.NewSuricata()
-				if err != nil {
-					return err
-				}
 				c := &redis.Options{
 					Addr:     viper.GetString("run.stream.ndr.redis.host"),
 					DB:       viper.GetInt("run.stream.ndr.redis.db"),
@@ -127,6 +124,18 @@ var runCmd = &cobra.Command{
 				pipeline := rdb.Pipeline()
 				defer pipeline.Close()
 
+				sessions, err := enrich.NewSuricata(enrich.SuricataConfig{
+					DestQueue: viper.GetString("run.stream.ndr.redis.queue.output.sessions"),
+				})
+				if err != nil {
+					return err
+				}
+				alerts, err := enrich.NewSuricata(enrich.SuricataConfig{
+					DestQueue: viper.GetString("run.stream.ndr.redis.queue.output.alerts"),
+				})
+				if err != nil {
+					return err
+				}
 				tick := time.NewTicker(3 * time.Second)
 				defer tick.Stop()
 
@@ -139,12 +148,19 @@ var runCmd = &cobra.Command{
 					case <-tick.C:
 						log.
 							WithField("enrichment_pickup", countEnrichPickups).
+							WithField("ndr_sessions", sessions.Stats.Total).
+							WithField("ndr_alerts", alerts.Stats.Total).
+							WithField("ndr_enrichments", sessions.Stats.Enriched+alerts.Stats.Enriched).
+							WithField(
+								"cid_missing",
+								sessions.Stats.MissingCommunityID+alerts.Stats.MissingCommunityID,
+							).
 							Info("NDR report")
 					case enrichment, ok := <-suriCh:
 						if !ok {
 							break loop
 						}
-						s.Commands.InsertCurrent(func(b *enrich.Bucket) error {
+						sessions.Commands.InsertCurrent(func(b *enrich.Bucket) error {
 							data, ok := b.Data.(enrich.CommandEvents)
 							if !ok {
 								return errors.New("suricata handler cmd event insert wrong type")
@@ -154,13 +170,13 @@ var runCmd = &cobra.Command{
 						})
 						countEnrichPickups++
 					default:
-						if err := stream.RedisBatchProcess(pipeline, s, viper.GetString(
-							"run.stream.suricata_alert_source.redis.key",
+						if err := stream.RedisBatchProcess(pipeline, sessions, viper.GetString(
+							"run.stream.ndr.redis.queue.input.sessions",
 						), 10); err != nil {
 							log.Error(err)
 						}
-						if err := stream.RedisBatchProcess(pipeline, s, viper.GetString(
-							"run.stream.suricata_eve_source.redis.key",
+						if err := stream.RedisBatchProcess(pipeline, alerts, viper.GetString(
+							"run.stream.ndr.redis.queue.input.alerts",
 						), 10); err != nil {
 							log.Error(err)
 						}
@@ -240,11 +256,11 @@ func init() {
 
 	addConfigRedisQueue(pFlags, "edr", "input", "winlogbeat", "EDR events input")
 
-	addConfigRedisQueue(pFlags, "ndr", "alert_input", "alerts", "NRD alerts input")
-	addConfigRedisQueue(pFlags, "ndr", "sessions_input", "sessions", "NRD sessions input")
+	addConfigRedisQueue(pFlags, "ndr", "input.alerts", "alerts", "NRD alerts input")
+	addConfigRedisQueue(pFlags, "ndr", "input.sessions", "sessions", "NRD sessions input")
 
-	addConfigRedisQueue(pFlags, "ndr", "alert_output", "alerts_edr", "NRD alerts input")
-	addConfigRedisQueue(pFlags, "ndr", "sessions_output", "sessions_edr", "NRD sessions input")
+	addConfigRedisQueue(pFlags, "ndr", "output.alerts", "alerts_edr", "NRD alerts input")
+	addConfigRedisQueue(pFlags, "ndr", "output.sessions", "sessions_edr", "NRD sessions input")
 }
 
 func addConfigRedisHost(pFlags *pflag.FlagSet, section, description string, db int) {
@@ -259,6 +275,7 @@ func addConfigRedisHost(pFlags *pflag.FlagSet, section, description string, db i
 }
 
 func addConfigRedisQueue(pFlags *pflag.FlagSet, section, name, fallback, description string) {
-	pFlags.String("stream-"+section+"-redis-queue-"+name, fallback, "Redis queue for "+description)
-	viper.BindPFlag("run.stream."+section+".redis.queue."+name, pFlags.Lookup("stream-"+section+"-redis-queue-"+name))
+	flag := fmt.Sprintf("stream-%s-redis-queue-%s", section, strings.ReplaceAll(name, ".", "-"))
+	pFlags.String(flag, fallback, "Redis queue for "+description)
+	viper.BindPFlag("run.stream."+section+".redis.queue."+name, pFlags.Lookup(flag))
 }
