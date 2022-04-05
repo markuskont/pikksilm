@@ -8,3 +8,7 @@ type Enrichment struct {
 	Key   string
 	Entry models.Entry
 }
+
+type Processor interface {
+	Process(models.Entry) error
+}

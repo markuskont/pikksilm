@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -66,14 +67,14 @@ var runCmd = &cobra.Command{
 				WithField("cmd_buckets_loaded", c.CmdLen()).
 				Info("winlog handler started")
 
-			switch viper.GetString("run.stream.input") {
+			switch viper.GetString("run.stream.edr.input") {
 			case "redis":
 				if err := stream.ReadWinlogRedis(ctx, log, c, models.ConfigRedisInstance{
-					Host:     viper.GetString("run.stream.winlog.redis.host"),
-					Database: viper.GetInt("run.stream.winlog.redis.db"),
-					Batch:    100,
-					Key:      viper.GetString("run.stream.winlog.redis.key"),
-					Password: viper.GetString("run.stream.winlog.redis.password"),
+					Host:     viper.GetString("run.stream.edr.redis.host"),
+					Password: viper.GetString("run.stream.edr.redis.password"),
+					Database: viper.GetInt("run.stream.edr.redis.db"),
+					Key:      viper.GetString("run.stream.edr.redis.queue.input"),
+					Batch:    10,
 				}); err != nil {
 					return err
 				}
@@ -81,24 +82,110 @@ var runCmd = &cobra.Command{
 				if err := stream.ReadWinlogStdin(ctx, log, c); err != nil {
 					return err
 				}
+			default:
+				return fmt.Errorf("invalid EDR input %s", viper.GetString("run.stream.edr.input"))
 			}
 			return c.Close()
 		})
+		var (
+			wiseCh chan enrich.Enrichment
+			suriCh chan enrich.Enrichment
+		)
+		if viper.GetBool("run.stream.ndr.enabled") {
+			log.Info("NDR enrichment enabled")
+			wiseCh = make(chan enrich.Enrichment, 100)
+			suriCh = make(chan enrich.Enrichment, 100)
+			// worker to split enrichmetns between WISE and Suricata
+			pool.Go(func() error {
+				defer close(wiseCh)
+				defer close(suriCh)
+				for item := range ch {
+					wiseCh <- item
+					suriCh <- item
+				}
+				return nil
+			})
+			// worker to work on suricata events
+			pool.Go(func() error {
+				s, err := enrich.NewSuricata()
+				if err != nil {
+					return err
+				}
+				c := &redis.Options{
+					Addr:     viper.GetString("run.stream.ndr.redis.host"),
+					DB:       viper.GetInt("run.stream.ndr.redis.db"),
+					Password: viper.GetString("run.stream.ndr.redis.password"),
+				}
+				log.WithFields(map[string]any{
+					"addr": c.Addr,
+					"db":   c.DB,
+				}).Debug("NDR connecting to redis")
+				rdb := redis.NewClient(c)
+				if resp := rdb.Ping(context.TODO()); resp == nil {
+					return fmt.Errorf("Unable to ping redis at %s", c.Addr)
+				}
+				pipeline := rdb.Pipeline()
+				defer pipeline.Close()
+
+				tick := time.NewTicker(3 * time.Second)
+				defer tick.Stop()
+
+				var (
+					countEnrichPickups int
+				)
+			loop:
+				for {
+					select {
+					case <-tick.C:
+						log.
+							WithField("enrichment_pickup", countEnrichPickups).
+							Info("NDR report")
+					case enrichment, ok := <-suriCh:
+						if !ok {
+							break loop
+						}
+						s.Commands.InsertCurrent(func(b *enrich.Bucket) error {
+							data, ok := b.Data.(enrich.CommandEvents)
+							if !ok {
+								return errors.New("suricata handler cmd event insert wrong type")
+							}
+							data[enrichment.Key] = enrichment.Entry
+							return nil
+						})
+						countEnrichPickups++
+					default:
+						if err := stream.RedisBatchProcess(pipeline, s, viper.GetString(
+							"run.stream.suricata_alert_source.redis.key",
+						), 10); err != nil {
+							log.Error(err)
+						}
+						if err := stream.RedisBatchProcess(pipeline, s, viper.GetString(
+							"run.stream.suricata_eve_source.redis.key",
+						), 10); err != nil {
+							log.Error(err)
+						}
+					}
+				}
+				return nil
+			})
+		} else {
+			log.Warn("NDR enrichment not enabled")
+			// no need for split if suricata is not enabled
+			wiseCh = ch
+		}
 		// worker to push correlated items to WISE
 		pool.Go(func() error {
-			rdb := redis.NewClient(&redis.Options{
+			c := &redis.Options{
 				Addr:     viper.GetString("run.stream.wise.redis.host"),
 				Password: viper.GetString("run.stream.wise.redis.password"),
 				DB:       viper.GetInt("run.stream.wise.redis.db"),
-			})
+			}
+			rdb := redis.NewClient(c)
 			if resp := rdb.Ping(context.TODO()); resp == nil {
-				return fmt.Errorf(
-					"Unable to ping redis at %s",
-					viper.GetString("run.stream.wise.redis.host"),
-				)
+				return fmt.Errorf("Unable to ping redis at %s", c.Addr)
 			}
 		loop:
-			for item := range ch {
+			for item := range wiseCh {
 				encoded, err := models.Decoder.Marshal(item.Entry)
 				if err != nil {
 					log.Error(err)
@@ -141,37 +228,37 @@ func init() {
 		"Good for out of order events. ")
 	viper.BindPFlag("run.buckets.net.enable", pFlags.Lookup("buckets-net-enable"))
 
-	pFlags.String("stream-input", "redis", "Redis, stdin")
-	viper.BindPFlag("run.stream.input", pFlags.Lookup("stream-input"))
+	pFlags.String("stream-edr-input", "redis", "Redis, stdin")
+	viper.BindPFlag("run.stream.edr.input", pFlags.Lookup("stream-edr-input"))
 
-	pFlags.Bool("stream-suricata", false, "Enable Suricata enrichment")
-	viper.BindPFlag("run.stream.suricata", pFlags.Lookup("stream-suricata"))
+	addConfigRedisHost(pFlags, "edr", "EDR (sysmon) input stream", 0)
+	addConfigRedisHost(pFlags, "ndr", "NDR (suricata) duplex stream", 0)
+	addConfigRedisHost(pFlags, "wise", "TI (Arkime WISE) output stream", 1)
 
-	initLogStreamSectionRedis(pFlags, "winlog", 0, "winlogbeat")
-	initLogStreamSectionRedis(pFlags, "wise", 1, "NA")
+	pFlags.Bool("stream-ndr-enabled", false, "Enable NDR (Suricata) enrichment")
+	viper.BindPFlag("run.stream.ndr.enabled", pFlags.Lookup("stream-ndr-enabled"))
 
-	initLogStreamSectionRedis(pFlags, "suricata_alert_source", 0, "eve_alert")
-	initLogStreamSectionRedis(pFlags, "suricata_eve_source", 0, "eve")
+	addConfigRedisQueue(pFlags, "edr", "input", "winlogbeat", "EDR events input")
 
-	initLogStreamSectionRedis(pFlags, "suricata_alert_dest", 0, "eve_alert_enriched")
-	initLogStreamSectionRedis(pFlags, "suricata_eve_dest", 0, "eve_enriched")
+	addConfigRedisQueue(pFlags, "ndr", "alert_input", "alerts", "NRD alerts input")
+	addConfigRedisQueue(pFlags, "ndr", "sessions_input", "sessions", "NRD sessions input")
+
+	addConfigRedisQueue(pFlags, "ndr", "alert_output", "alerts_edr", "NRD alerts input")
+	addConfigRedisQueue(pFlags, "ndr", "sessions_output", "sessions_edr", "NRD sessions input")
 }
 
-func initLogStreamSectionRedis(
-	pFlags *pflag.FlagSet,
-	section string,
-	db int,
-	key string,
-) {
-	pFlags.String(section+"-redis-host", "localhost:6379", "Host to redis instance.")
-	viper.BindPFlag("run.stream."+section+".redis.host", pFlags.Lookup(section+"-redis-host"))
+func addConfigRedisHost(pFlags *pflag.FlagSet, section, description string, db int) {
+	pFlags.String("stream-"+section+"-redis-host", "localhost:6379", "Redis host for "+description)
+	viper.BindPFlag("run.stream."+section+".redis.host", pFlags.Lookup("stream-"+section+"-redis-host"))
 
-	pFlags.String(section+"-redis-password", "", "Redis password.")
-	viper.BindPFlag("run.stream."+section+".redis.password", pFlags.Lookup(section+"-redis-password"))
+	pFlags.String("stream-"+section+"-redis-password", "", "Password for "+description+". Empty means no auth.")
+	viper.BindPFlag("run.stream."+section+".redis.password", pFlags.Lookup("stream-"+section+"-redis-password"))
 
-	pFlags.Int(section+"-redis-db", db, "Redis database.")
-	viper.BindPFlag("run.stream."+section+".redis.db", pFlags.Lookup(section+"-redis-db"))
+	pFlags.Int("stream-"+section+"-redis-db", db, "Redis database for "+description)
+	viper.BindPFlag("run.stream."+section+".redis.db", pFlags.Lookup("stream-"+section+"-redis-db"))
+}
 
-	pFlags.String(section+"-redis-key", key, "Redis queue key")
-	viper.BindPFlag("run.stream."+section+".redis.key", pFlags.Lookup(section+"-redis-key"))
+func addConfigRedisQueue(pFlags *pflag.FlagSet, section, name, fallback, description string) {
+	pFlags.String("stream-"+section+"-redis-queue-"+name, fallback, "Redis queue for "+description)
+	viper.BindPFlag("run.stream."+section+".redis.queue."+name, pFlags.Lookup("stream-"+section+"-redis-queue-"+name))
 }

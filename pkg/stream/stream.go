@@ -30,7 +30,7 @@ loop:
 		case <-tick.C:
 			log.
 				WithFields(w.Stats.Fields()).
-				Info("enrichment report")
+				Info("EDR report")
 		default:
 			var e models.Entry
 			if err := models.Decoder.Unmarshal(scanner.Bytes(), &e); err != nil {
@@ -74,35 +74,43 @@ outer:
 		case <-tick.C:
 			log.
 				WithFields(w.Stats.Fields()).
-				Info("enrichment report")
+				Info("EDR report")
 		case <-ctx.Done():
 			break outer
 		default:
-			data := pipeline.LRange(context.TODO(), c.Key, 0, c.Batch)
-			pipeline.LTrim(context.TODO(), c.Key, c.Batch, -1)
-			_, err := pipeline.Exec(context.TODO())
-			if err != nil {
-				return err
-			}
-			result, err := data.Result()
-			if err != nil {
-				return err
-			}
-			if len(result) == 0 {
-				time.Sleep(100 * time.Microsecond)
-			}
-		loop:
-			for _, item := range result {
-				var e models.Entry
-				if err := models.Decoder.Unmarshal([]byte(item), &e); err != nil {
-					log.Error(err)
-					continue loop
-				}
-				if err := w.Process(e); err != nil {
-					log.Error(err)
-				}
+			if err := RedisBatchProcess(pipeline, w, c.Key, c.Batch); err != nil {
+				log.Error(err)
 			}
 		}
 	}
 	return nil
+}
+
+func RedisBatchProcess(
+	pipeline redis.Pipeliner,
+	p enrich.Processor,
+	key string,
+	batch int64,
+) error {
+	data := pipeline.LRange(context.TODO(), key, 0, batch)
+	pipeline.LTrim(context.TODO(), key, batch, -1)
+	_, err := pipeline.Exec(context.TODO())
+	if err != nil {
+		return err
+	}
+	result, err := data.Result()
+	if err != nil {
+		return err
+	}
+	if len(result) == 0 {
+		time.Sleep(100 * time.Microsecond)
+	}
+	for _, item := range result {
+		var e models.Entry
+		if err := models.Decoder.Unmarshal([]byte(item), &e); err != nil {
+			return err
+		}
+		err = p.Process(e)
+	}
+	return err
 }
