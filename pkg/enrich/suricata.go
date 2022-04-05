@@ -1,10 +1,14 @@
 package enrich
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
+	"os"
 	"time"
 
 	"github.com/markuskont/pikksilm/pkg/models"
+	"github.com/sirupsen/logrus"
 )
 
 type SuricataStats struct {
@@ -20,6 +24,8 @@ type Suricata struct {
 	EVE *Buckets
 
 	Stats SuricataStats
+
+	enrichmentWriter io.WriteCloser
 }
 
 func (s *Suricata) checkEntries(e Entries) error {
@@ -32,11 +38,16 @@ func (s *Suricata) checkEntries(e Entries) error {
 			if cid, ok := item.GetString("community_id"); !ok {
 				// seeing a few of these is most likely stats
 				// a lot or all means missing community_id in suricata config
+				// FIXME - this counter is wrong due to how bucket checks behave
+				// TODO - only increment on first bucket check, others are duplicates
 				s.Stats.MissingCommunityID++
 			} else {
 				if val, seen := edr[cid]; seen {
 					item["edr"] = val
 					s.Stats.Enriched++
+					if err := s.writeEnrichedEntry(item); err != nil {
+						logrus.Error(err)
+					}
 				}
 			}
 		}
@@ -67,8 +78,31 @@ func (s *Suricata) Process(e models.Entry) error {
 	return nil
 }
 
+func (s Suricata) writeEnrichedEntry(e models.Entry) error {
+	if writer := s.enrichmentWriter; writer != nil {
+		encoded, err := json.Marshal(e)
+		if err != nil {
+			return err
+		}
+		_, err = writer.Write(append(encoded, []byte("\n")...))
+		return err
+	}
+	return nil
+}
+
+func (s Suricata) Close() error {
+	if s.enrichmentWriter != nil {
+		return s.enrichmentWriter.Close()
+	}
+	return nil
+}
+
 type SuricataConfig struct {
 	DestQueue string
+
+	// EnrichedJSONPath is optional file path to write out enrichments.
+	// Mostly for debugging.
+	EnrichedJSONPath string
 }
 
 func NewSuricata(c SuricataConfig) (*Suricata, error) {
@@ -97,5 +131,13 @@ func NewSuricata(c SuricataConfig) (*Suricata, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Suricata{Commands: commands, EVE: eve}, nil
+	s := &Suricata{Commands: commands, EVE: eve}
+	if c.EnrichedJSONPath != "" {
+		f, err := os.Create(c.EnrichedJSONPath)
+		if err != nil {
+			return nil, err
+		}
+		s.enrichmentWriter = f
+	}
+	return s, nil
 }

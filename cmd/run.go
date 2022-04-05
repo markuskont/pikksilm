@@ -130,12 +130,15 @@ var runCmd = &cobra.Command{
 				if err != nil {
 					return err
 				}
+				defer sessions.Close()
 				alerts, err := enrich.NewSuricata(enrich.SuricataConfig{
 					DestQueue: viper.GetString("run.stream.ndr.redis.queue.output.alerts"),
 				})
 				if err != nil {
 					return err
 				}
+				defer alerts.Close()
+
 				tick := time.NewTicker(3 * time.Second)
 				defer tick.Stop()
 
