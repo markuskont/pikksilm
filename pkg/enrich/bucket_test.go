@@ -76,36 +76,41 @@ func TestBucketExpand(t *testing.T) {
 	val1 := NetworkEvents{
 		{SrcIP: net.IPv4(1, 1, 1, 1)},
 	}
-	assert.Nil(t, buckets.insert(func(b *Bucket) error {
+	_, err = buckets.insert(func(b *Bucket) error {
 		b.Data = val1
 		return nil
-	}, ts))
+	}, ts)
+	assert.Nil(t, err)
 	val2 := NetworkEvents{
 		{SrcIP: net.IPv4(1, 1, 2, 1)},
 	}
-	assert.Nil(t, buckets.insert(func(b *Bucket) error {
+	_, err = buckets.insert(func(b *Bucket) error {
 		b.Data = val2
 		return nil
-	}, ts.Add(6*time.Second)))
+	}, ts.Add(6*time.Second))
+	assert.Nil(t, err)
 	val3 := NetworkEvents{
 		{SrcIP: net.IPv4(1, 1, 3, 1)},
 	}
-	assert.Nil(t, buckets.insert(func(b *Bucket) error {
+	_, err = buckets.insert(func(b *Bucket) error {
 		b.Data = val3
 		return nil
-	}, ts.Add(12*time.Second)))
+	}, ts.Add(12*time.Second))
+	assert.Nil(t, err)
 	val4 := NetworkEvents{
 		{SrcIP: net.IPv4(1, 1, 4, 1)},
 	}
-	assert.Nil(t, buckets.insert(func(b *Bucket) error {
+	_, err = buckets.insert(func(b *Bucket) error {
 		b.Data = val4
 		return nil
-	}, ts.Add(18*time.Second)))
+	}, ts.Add(18*time.Second))
+	assert.Nil(t, err)
 	val4expandded := append(val4, models.NetworkEntry{SrcIP: net.IPv4(1, 1, 4, 2)})
-	assert.Nil(t, buckets.insert(func(b *Bucket) error {
+	_, err = buckets.insert(func(b *Bucket) error {
 		b.Data = val4expandded
 		return nil
-	}, ts.Add(18*time.Second)))
+	}, ts.Add(18*time.Second))
+	assert.Nil(t, err)
 
 	assert.Equal(t, 3, len(buckets.Buckets))
 	assert.Equal(t, val4expandded, buckets.Buckets[2].Data.(NetworkEvents))
