@@ -55,7 +55,7 @@ func (s *Suricata) checkEntries(e Entries) error {
 	})
 }
 
-func (s *Suricata) Process(e models.Entry) error {
+func (s *Suricata) Process(e models.Entry) (Entries, error) {
 	s.Stats.Total++
 	b, err := s.EVE.InsertCurrentAndGetVal(func(b *Bucket) error {
 		data, ok := b.Data.(Entries)
@@ -66,16 +66,19 @@ func (s *Suricata) Process(e models.Entry) error {
 		return nil
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if b != nil {
 		data, ok := b.Data.(Entries)
 		if !ok {
-			return errors.New("ndr data cache wrong type")
+			return nil, errors.New("ndr data cache wrong type")
 		}
-		return s.checkEntries(data)
+		if err := s.checkEntries(data); err != nil {
+			return nil, err
+		}
+		return data, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func (s Suricata) writeEnrichedEntry(e models.Entry) error {
@@ -98,17 +101,12 @@ func (s Suricata) Close() error {
 }
 
 type SuricataConfig struct {
-	DestQueue string
-
 	// EnrichedJSONPath is optional file path to write out enrichments.
 	// Mostly for debugging.
 	EnrichedJSONPath string
 }
 
 func NewSuricata(c SuricataConfig) (*Suricata, error) {
-	if c.DestQueue == "" {
-		return nil, errors.New("NDR destination queue missing")
-	}
 	commands, err := newBuckets(bucketsConfig{
 		BucketsConfig: BucketsConfig{
 			Count: 2,

@@ -124,16 +124,12 @@ var runCmd = &cobra.Command{
 				pipeline := rdb.Pipeline()
 				defer pipeline.Close()
 
-				sessions, err := enrich.NewSuricata(enrich.SuricataConfig{
-					DestQueue: viper.GetString("run.stream.ndr.redis.queue.output.sessions"),
-				})
+				sessions, err := enrich.NewSuricata(enrich.SuricataConfig{})
 				if err != nil {
 					return err
 				}
 				defer sessions.Close()
-				alerts, err := enrich.NewSuricata(enrich.SuricataConfig{
-					DestQueue: viper.GetString("run.stream.ndr.redis.queue.output.alerts"),
-				})
+				alerts, err := enrich.NewSuricata(enrich.SuricataConfig{})
 				if err != nil {
 					return err
 				}
@@ -173,14 +169,16 @@ var runCmd = &cobra.Command{
 						})
 						countEnrichPickups++
 					default:
-						if err := stream.RedisBatchProcess(pipeline, sessions, viper.GetString(
-							"run.stream.ndr.redis.queue.input.sessions",
-						), 10); err != nil {
+						if err := stream.RedisBatchProcess(pipeline, sessions,
+							viper.GetString("run.stream.ndr.redis.queue.input.sessions"),
+							viper.GetString("run.stream.ndr.redis.queue.output.sessions"),
+							10); err != nil {
 							log.Error(err)
 						}
-						if err := stream.RedisBatchProcess(pipeline, alerts, viper.GetString(
-							"run.stream.ndr.redis.queue.input.alerts",
-						), 10); err != nil {
+						if err := stream.RedisBatchProcess(pipeline, alerts,
+							viper.GetString("run.stream.ndr.redis.queue.input.alerts"),
+							viper.GetString("run.stream.ndr.redis.queue.output.alerts"),
+							10); err != nil {
 							log.Error(err)
 						}
 					}

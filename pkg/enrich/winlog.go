@@ -75,14 +75,14 @@ func (c *Winlog) Enrichments() <-chan Enrichment {
 
 func (c Winlog) CmdLen() int { return len(c.buckets.commands.Buckets) }
 
-func (c *Winlog) Process(e models.Entry) error {
+func (c *Winlog) Process(e models.Entry) (Entries, error) {
 	entityID, ok := e.GetString("process", "entity_id")
 	if !ok {
-		return errors.New("entity id missing")
+		return nil, errors.New("entity id missing")
 	}
 	eventID, ok := e.GetString("winlog", "event_id")
 	if !ok {
-		return errors.New("event id missing")
+		return nil, errors.New("event id missing")
 	}
 	c.Stats.Count++
 	switch eventID {
@@ -90,7 +90,7 @@ func (c *Winlog) Process(e models.Entry) error {
 		// network event
 		ne, err := models.ExtractNetworkEntry(e, entityID)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		// check if we already have corresponding command event cached
@@ -129,14 +129,14 @@ func (c *Winlog) Process(e models.Entry) error {
 				return nil
 			})
 		}); err != nil {
-			return err
+			return nil, err
 		}
 
 		// TODO - this actually seems kinda pointless, maybe ditch this code path entirely
 		// if no corresponding command found, cache for out of order lookup
 		if !found && c.storeNetEvents {
 			c.Stats.NetEventsStored++
-			return c.buckets.network.InsertCurrent(func(b *Bucket) error {
+			err := c.buckets.network.InsertCurrent(func(b *Bucket) error {
 				data, ok := b.Data.(NetworkEvents)
 				if !ok {
 					return errors.New("invalid bucket data type")
@@ -144,6 +144,7 @@ func (c *Winlog) Process(e models.Entry) error {
 				b.Data = append(data, *ne)
 				return nil
 			})
+			return nil, err
 		}
 
 	case "1":
@@ -160,7 +161,7 @@ func (c *Winlog) Process(e models.Entry) error {
 		// TODO - this actually seems kinda pointless, maybe ditch this code path entirely
 		if c.storeNetEvents {
 			// now we should also do a lookup to see if any network events came before the command
-			return c.buckets.network.Check(func(b *Bucket) error {
+			err := c.buckets.network.Check(func(b *Bucket) error {
 				data, ok := b.Data.(NetworkEvents)
 				if !ok {
 					return errors.New("invalid bucket data type")
@@ -181,11 +182,12 @@ func (c *Winlog) Process(e models.Entry) error {
 				}
 				return nil
 			})
+			return nil, err
 		}
 	default:
-		return nil
+		return nil, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func (c *Winlog) send(e models.Entry, key string) {

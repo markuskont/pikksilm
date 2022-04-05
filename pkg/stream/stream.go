@@ -37,7 +37,8 @@ loop:
 				log.Error(err)
 				continue loop
 			}
-			if err := w.Process(e); err != nil {
+			_, err := w.Process(e)
+			if err != nil {
 				log.Error(err)
 			}
 		}
@@ -78,7 +79,7 @@ outer:
 		case <-ctx.Done():
 			break outer
 		default:
-			if err := RedisBatchProcess(pipeline, w, c.Key, c.Batch); err != nil {
+			if err := RedisBatchProcess(pipeline, w, c.Key, "", c.Batch); err != nil {
 				log.Error(err)
 			}
 		}
@@ -89,11 +90,11 @@ outer:
 func RedisBatchProcess(
 	pipeline redis.Pipeliner,
 	p enrich.Processor,
-	key string,
+	src, dest string,
 	batch int64,
 ) error {
-	data := pipeline.LRange(context.TODO(), key, 0, batch)
-	pipeline.LTrim(context.TODO(), key, batch, -1)
+	data := pipeline.LRange(context.TODO(), src, 0, batch)
+	pipeline.LTrim(context.TODO(), src, batch, -1)
 	_, err := pipeline.Exec(context.TODO())
 	if err != nil {
 		return err
@@ -110,7 +111,27 @@ func RedisBatchProcess(
 		if err := models.Decoder.Unmarshal([]byte(item), &e); err != nil {
 			return err
 		}
-		err = p.Process(e)
+		bulk, err := p.Process(e)
+		if err != nil {
+			return err
+		}
+		if bulk != nil && dest != "" {
+			if err := RedisPushEntries(pipeline, bulk, dest); err != nil {
+				return err
+			}
+		}
 	}
+	return err
+}
+
+func RedisPushEntries(pipeline redis.Pipeliner, b enrich.Entries, key string) error {
+	for _, item := range b {
+		encoded, err := models.Decoder.Marshal(item)
+		if err != nil {
+			return err
+		}
+		pipeline.RPush(context.Background(), key, encoded)
+	}
+	_, err := pipeline.Exec(context.Background())
 	return err
 }
