@@ -169,7 +169,7 @@ var runCmd = &cobra.Command{
 				}
 				defer alerts.Close()
 
-				tick := time.NewTicker(3 * time.Second)
+				tick := time.NewTicker(10 * time.Second)
 				defer tick.Stop()
 
 				var (

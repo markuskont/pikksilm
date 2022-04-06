@@ -20,7 +20,7 @@ func ReadWinlogStdin(
 	w *enrich.Winlog,
 ) error {
 	scanner := bufio.NewScanner(os.Stdin)
-	tick := time.NewTicker(3 * time.Second)
+	tick := time.NewTicker(10 * time.Second)
 	defer tick.Stop()
 loop:
 	for scanner.Scan() {
@@ -68,7 +68,7 @@ func ReadWinlogRedis(
 	pipeline := rdb.Pipeline()
 	defer pipeline.Close()
 
-	tick := time.NewTicker(3 * time.Second)
+	tick := time.NewTicker(10 * time.Second)
 	defer tick.Stop()
 
 outer:
