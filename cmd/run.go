@@ -120,6 +120,8 @@ var runCmd = &cobra.Command{
 				rdb := redis.NewClient(c)
 				if resp := rdb.Ping(context.TODO()); resp == nil {
 					return fmt.Errorf("Unable to ping redis at %s", c.Addr)
+				} else if err := resp.Err(); err != nil {
+					return err
 				}
 				pipeline := rdb.Pipeline()
 				defer pipeline.Close()
@@ -200,6 +202,8 @@ var runCmd = &cobra.Command{
 			rdb := redis.NewClient(c)
 			if resp := rdb.Ping(context.TODO()); resp == nil {
 				return fmt.Errorf("Unable to ping redis at %s", c.Addr)
+			} else if err := resp.Err(); err != nil {
+				return err
 			}
 		loop:
 			for item := range wiseCh {

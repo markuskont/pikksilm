@@ -62,6 +62,8 @@ func ReadWinlogRedis(
 	})
 	if resp := rdb.Ping(context.TODO()); resp == nil {
 		return fmt.Errorf("Unable to ping redis at %s", c.Host)
+	} else if err := resp.Err(); err != nil {
+		return err
 	}
 	pipeline := rdb.Pipeline()
 	defer pipeline.Close()
