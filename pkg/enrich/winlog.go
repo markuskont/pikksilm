@@ -97,6 +97,7 @@ func (c *Winlog) Process(e models.Entry) (Entries, error) {
 	c.Stats.Count++
 	switch eventID {
 	case "3":
+		c.Stats.CountNetwork++
 		// network event
 		ne, err := models.ExtractNetworkEntry(e, entityID)
 		if err != nil {
@@ -158,6 +159,7 @@ func (c *Winlog) Process(e models.Entry) (Entries, error) {
 		}
 
 	case "1":
+		c.Stats.CountCommand++
 		// command event
 		// we expect only one command event per entity id
 		c.buckets.commands.InsertCurrent(func(b *Bucket) error {
