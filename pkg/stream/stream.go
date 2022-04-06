@@ -81,7 +81,7 @@ outer:
 		case <-ctx.Done():
 			break outer
 		default:
-			if err := RedisBatchProcess(pipeline, w, c.Key, "", c.Batch); err != nil {
+			if err := RedisBatchProcess(pipeline, w, c.Key, "", c.Batch, log); err != nil {
 				log.Error(err)
 			}
 		}
@@ -94,6 +94,7 @@ func RedisBatchProcess(
 	p enrich.Processor,
 	src, dest string,
 	batch int64,
+	log *logrus.Logger,
 ) error {
 	data := pipeline.LRange(context.TODO(), src, 0, batch)
 	pipeline.LTrim(context.TODO(), src, batch, -1)
@@ -108,18 +109,22 @@ func RedisBatchProcess(
 	if len(result) == 0 {
 		time.Sleep(100 * time.Microsecond)
 	}
+loop:
 	for _, item := range result {
 		var e models.Entry
 		if err := models.Decoder.Unmarshal([]byte(item), &e); err != nil {
-			return err
+			log.Error(err)
+			continue loop
 		}
 		bulk, err := p.Process(e)
 		if err != nil {
-			return err
+			log.Error(err)
+			continue loop
 		}
 		if bulk != nil && dest != "" {
 			if err := RedisPushEntries(pipeline, bulk, dest); err != nil {
-				return err
+				log.Error(err)
+				continue loop
 			}
 		}
 	}

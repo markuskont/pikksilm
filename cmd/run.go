@@ -206,13 +206,13 @@ var runCmd = &cobra.Command{
 						if err := stream.RedisBatchProcess(pipeline, sessions,
 							viper.GetString("run.stream.ndr.redis.queue.input.sessions"),
 							viper.GetString("run.stream.ndr.redis.queue.output.sessions"),
-							10); err != nil {
+							10, log); err != nil {
 							log.Error(err)
 						}
 						if err := stream.RedisBatchProcess(pipeline, alerts,
 							viper.GetString("run.stream.ndr.redis.queue.input.alerts"),
 							viper.GetString("run.stream.ndr.redis.queue.output.alerts"),
-							10); err != nil {
+							10, log); err != nil {
 							log.Error(err)
 						}
 					}

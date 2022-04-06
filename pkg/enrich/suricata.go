@@ -26,6 +26,7 @@ type Suricata struct {
 	Stats SuricataStats
 
 	enrichmentWriter io.WriteCloser
+	log              *logrus.Logger
 }
 
 func (s *Suricata) checkEntries(e Entries) error {
@@ -45,8 +46,8 @@ func (s *Suricata) checkEntries(e Entries) error {
 				if val, seen := edr[cid]; seen {
 					item["edr"] = val
 					s.Stats.Enriched++
-					if err := s.writeEnrichedEntry(item); err != nil {
-						logrus.Error(err)
+					if err := s.writeEnrichedEntry(item); err != nil && s.log != nil {
+						s.log.Error(err)
 					}
 				}
 			}

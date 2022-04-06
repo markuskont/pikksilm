@@ -19,6 +19,8 @@ type WinlogStats struct {
 	Count           int
 	CountCommand    int
 	CountNetwork    int
+	MissingGUID     int
+	MissingEventID  int
 	SeenGUID        map[string]bool
 }
 
@@ -30,10 +32,10 @@ func (ws WinlogStats) Fields() map[string]any {
 		"count":             ws.Count,
 		"count_command":     ws.CountCommand,
 		"count_network":     ws.CountNetwork,
-		"enriched_percent":  float64(ws.Enriched) / float64(ws.CountNetwork),
 		"net_events_stored": ws.NetEventsStored,
 		"net_events_popped": ws.NetEventsPopped,
 		"cmd_bucket_moves":  ws.CmdBucketMoves,
+		"guid_missing":      ws.MissingGUID,
 	}
 }
 
@@ -78,11 +80,19 @@ func (c Winlog) CmdLen() int { return len(c.buckets.commands.Buckets) }
 func (c *Winlog) Process(e models.Entry) (Entries, error) {
 	entityID, ok := e.GetString("process", "entity_id")
 	if !ok {
-		return nil, errors.New("entity id missing")
+		c.Stats.MissingGUID++
+		// TODO - return ErrInvalidEvent instead, needs type switch on caller,
+		// as early return here is common for mixed streams. So it's not an error,
+		// just invalid event
+		return nil, nil
 	}
 	eventID, ok := e.GetString("winlog", "event_id")
 	if !ok {
-		return nil, errors.New("event id missing")
+		c.Stats.MissingEventID++
+		return nil, models.ErrInvalidEvent{
+			Key: "winlog.event_id",
+			Raw: e,
+		}
 	}
 	c.Stats.Count++
 	switch eventID {
