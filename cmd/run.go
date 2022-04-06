@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -39,7 +40,7 @@ var runCmd = &cobra.Command{
 		// worker to handle system signals
 		pool.Go(func() error {
 			ch := make(chan os.Signal, 1)
-			signal.Notify(ch, os.Interrupt)
+			signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 			<-ch
 			stop()
 			return nil
