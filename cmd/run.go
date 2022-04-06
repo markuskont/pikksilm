@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path"
 	"strings"
 	"time"
 
@@ -126,12 +127,33 @@ var runCmd = &cobra.Command{
 				pipeline := rdb.Pipeline()
 				defer pipeline.Close()
 
-				sessions, err := enrich.NewSuricata(enrich.SuricataConfig{})
+				var (
+					logSessions string
+					logAlerts   string
+				)
+
+				if viper.GetBool("run.stream.ndr.log.enrichments") {
+					if pth := viper.GetString("run.dir.dump"); pth != "" {
+						logSessions = path.Join(pth, "sessions.json")
+						logAlerts = path.Join(pth, "alerts.json")
+						log.
+							WithField("sessions", logSessions).
+							WithField("alerts", logAlerts).
+							Info("NDR enrichment logging enabled")
+					} else {
+						log.Warn("NDR enrichment logging enabled but dump folder not configured.")
+					}
+				}
+				sessions, err := enrich.NewSuricata(
+					enrich.SuricataConfig{EnrichedJSONPath: logSessions},
+				)
 				if err != nil {
 					return err
 				}
 				defer sessions.Close()
-				alerts, err := enrich.NewSuricata(enrich.SuricataConfig{})
+				alerts, err := enrich.NewSuricata(
+					enrich.SuricataConfig{EnrichedJSONPath: logAlerts},
+				)
 				if err != nil {
 					return err
 				}
@@ -258,6 +280,10 @@ func init() {
 
 	pFlags.Bool("stream-ndr-enabled", false, "Enable NDR (Suricata) enrichment")
 	viper.BindPFlag("run.stream.ndr.enabled", pFlags.Lookup("stream-ndr-enabled"))
+
+	pFlags.Bool("stream-ndr-log-enrichments", false, "Enable logging of enriched NDR events."+
+		" Requires --dir-dump to be configured")
+	viper.BindPFlag("run.stream.ndr.log.enrichments", pFlags.Lookup("stream-ndr-log-enrichments"))
 
 	addConfigRedisQueue(pFlags, "edr", "input", "winlogbeat", "EDR events input")
 
