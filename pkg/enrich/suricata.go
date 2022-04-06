@@ -104,14 +104,13 @@ type SuricataConfig struct {
 	// EnrichedJSONPath is optional file path to write out enrichments.
 	// Mostly for debugging.
 	EnrichedJSONPath string
+
+	CommandBuckets BucketsConfig
 }
 
 func NewSuricata(c SuricataConfig) (*Suricata, error) {
 	commands, err := newBuckets(bucketsConfig{
-		BucketsConfig: BucketsConfig{
-			Count: 2,
-			Size:  30 * time.Second,
-		},
+		BucketsConfig: c.CommandBuckets,
 		ContainerCreateFunc: func() any {
 			return make(CommandEvents)
 		},

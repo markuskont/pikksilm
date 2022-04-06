@@ -144,15 +144,25 @@ var runCmd = &cobra.Command{
 						log.Warn("NDR enrichment logging enabled but dump folder not configured.")
 					}
 				}
+				cc := enrich.BucketsConfig{
+					Size:  viper.GetDuration("run.buckets.ndr.enrichments.size"),
+					Count: viper.GetInt("run.buckets.ndr.enrichments.count"),
+				}
 				sessions, err := enrich.NewSuricata(
-					enrich.SuricataConfig{EnrichedJSONPath: logSessions},
+					enrich.SuricataConfig{
+						EnrichedJSONPath: logSessions,
+						CommandBuckets:   cc,
+					},
 				)
 				if err != nil {
 					return err
 				}
 				defer sessions.Close()
 				alerts, err := enrich.NewSuricata(
-					enrich.SuricataConfig{EnrichedJSONPath: logAlerts},
+					enrich.SuricataConfig{
+						EnrichedJSONPath: logAlerts,
+						CommandBuckets:   cc,
+					},
 				)
 				if err != nil {
 					return err
@@ -270,6 +280,12 @@ func init() {
 	pFlags.Bool("buckets-net-enable", true, "Enable network bucket collection. "+
 		"Good for out of order events. ")
 	viper.BindPFlag("run.buckets.net.enable", pFlags.Lookup("buckets-net-enable"))
+
+	pFlags.Int("buckets-ndr-enrichments-count", 3, "Number of enrichment cache buckets for NDR stream")
+	viper.BindPFlag("run.buckets.ndr.enrichments.count", pFlags.Lookup("buckets-ndr-enrichments-count"))
+
+	pFlags.Duration("buckets-ndr-enrichments-size", 1*time.Minute, "Duration of enrichment buckets for NDR stream")
+	viper.BindPFlag("run.buckets.ndr.enrichments.size", pFlags.Lookup("buckets-ndr-enrichments-size"))
 
 	pFlags.String("stream-edr-input", "redis", "Redis, stdin")
 	viper.BindPFlag("run.stream.edr.input", pFlags.Lookup("stream-edr-input"))
