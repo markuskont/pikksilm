@@ -132,6 +132,9 @@ loop:
 }
 
 func RedisPushEntries(pipeline redis.Pipeliner, b enrich.Entries, key string) error {
+	if len(b) == 0 {
+		return nil
+	}
 	for _, item := range b {
 		encoded, err := models.Decoder.Marshal(item)
 		if err != nil {

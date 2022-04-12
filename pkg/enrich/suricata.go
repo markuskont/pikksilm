@@ -69,17 +69,13 @@ func (s *Suricata) Process(e models.Entry) (Entries, error) {
 	if err != nil {
 		return nil, err
 	}
-	if b != nil {
-		data, ok := b.Data.(Entries)
-		if !ok {
-			return nil, errors.New("ndr data cache wrong type")
-		}
-		if err := s.checkEntries(data); err != nil {
-			return nil, err
-		}
-		return data, nil
-	}
-	return nil, nil
+	return s.checkBucket(b)
+}
+
+func (s Suricata) CheckRelease() Entries {
+	b, _ := s.EVE.InsertCurrentAndGetVal(func(b *Bucket) error { return nil })
+	e, _ := s.checkBucket(b)
+	return e
 }
 
 func (s Suricata) writeEnrichedEntry(e models.Entry) error {
@@ -138,4 +134,18 @@ func NewSuricata(c SuricataConfig) (*Suricata, error) {
 		s.enrichmentWriter = f
 	}
 	return s, nil
+}
+
+func (s Suricata) checkBucket(b *Bucket) (Entries, error) {
+	if b == nil {
+		return nil, nil
+	}
+	data, ok := b.Data.(Entries)
+	if !ok {
+		return nil, errors.New("ndr data cache wrong type")
+	}
+	if err := s.checkEntries(data); err != nil {
+		return nil, err
+	}
+	return data, nil
 }

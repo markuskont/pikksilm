@@ -170,6 +170,9 @@ var runCmd = &cobra.Command{
 				tick := time.NewTicker(10 * time.Second)
 				defer tick.Stop()
 
+				tickRelease := time.NewTicker(1 * time.Second)
+				defer tickRelease.Stop()
+
 				var (
 					countEnrichPickups int
 				)
@@ -200,6 +203,17 @@ var runCmd = &cobra.Command{
 							return nil
 						})
 						countEnrichPickups++
+					case <-tickRelease.C:
+						stream.RedisPushEntries(
+							pipeline,
+							sessions.CheckRelease(),
+							viper.GetString("run.stream.ndr.redis.queue.output.sessions"),
+						)
+						stream.RedisPushEntries(
+							pipeline,
+							sessions.CheckRelease(),
+							viper.GetString("run.stream.ndr.redis.queue.output.alerts"),
+						)
 					default:
 						if err := stream.RedisBatchProcess(pipeline, sessions,
 							viper.GetString("run.stream.ndr.redis.queue.input.sessions"),
