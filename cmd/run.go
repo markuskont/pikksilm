@@ -167,6 +167,15 @@ var runCmd = &cobra.Command{
 				}
 				defer alerts.Close()
 
+				if assets := viper.GetString("run.stream.ndr.assets"); assets != "" {
+					parsed, err := enrich.NewAssets(assets)
+					if err != nil {
+						log.Fatal(err)
+					}
+					alerts.Assets = parsed
+					sessions.Assets = parsed
+				}
+
 				tick := time.NewTicker(10 * time.Second)
 				defer tick.Stop()
 
@@ -308,6 +317,9 @@ func init() {
 
 	pFlags.Bool("stream-ndr-enabled", false, "Enable NDR (Suricata) enrichment")
 	viper.BindPFlag("run.stream.ndr.enabled", pFlags.Lookup("stream-ndr-enabled"))
+
+	pFlags.String("stream-ndr-assets", "", "Path to NDR asset enrichment file")
+	viper.BindPFlag("run.stream.ndr.assets", pFlags.Lookup("stream-ndr-assets"))
 
 	pFlags.Bool("stream-ndr-log-enrichments", false, "Enable logging of enriched NDR events."+
 		" Requires --dir-dump to be configured")
