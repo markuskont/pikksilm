@@ -36,7 +36,7 @@ var runCmd = &cobra.Command{
 		ch := make(chan enrich.Enrichment, 1000)
 		ctx, stop := context.WithCancel(context.Background())
 
-		pool := errgroup.Group{}
+		pool, poolCtx := errgroup.WithContext(ctx)
 		// worker to handle system signals
 		pool.Go(func() error {
 			ch := make(chan os.Signal, 1)
@@ -72,7 +72,7 @@ var runCmd = &cobra.Command{
 
 			switch viper.GetString("run.stream.edr.input") {
 			case "redis":
-				if err := stream.ReadWinlogRedis(ctx, log, c, models.ConfigRedisInstance{
+				if err := stream.ReadWinlogRedis(poolCtx, log, c, models.ConfigRedisInstance{
 					Host:     viper.GetString("run.stream.edr.redis.host"),
 					Password: viper.GetString("run.stream.edr.redis.password"),
 					Database: viper.GetInt("run.stream.edr.redis.db"),
@@ -82,7 +82,7 @@ var runCmd = &cobra.Command{
 					return err
 				}
 			case "stdin":
-				if err := stream.ReadWinlogStdin(ctx, log, c); err != nil {
+				if err := stream.ReadWinlogStdin(poolCtx, log, c); err != nil {
 					return err
 				}
 			default:
@@ -120,11 +120,8 @@ var runCmd = &cobra.Command{
 					"db":   c.DB,
 				}).Debug("NDR connecting to redis")
 				rdb := redis.NewClient(c)
-				if resp := rdb.Ping(context.TODO()); resp == nil {
-					return fmt.Errorf("Unable to ping redis at %s", c.Addr)
-				} else if err := resp.Err(); err != nil {
-					return err
-				}
+				stream.CheckRedisConn(poolCtx, rdb, log, c.Addr, "ndr")
+				log.Info("ndr redis handler started")
 				pipeline := rdb.Pipeline()
 				defer pipeline.Close()
 
@@ -209,12 +206,14 @@ var runCmd = &cobra.Command{
 							viper.GetString("run.stream.ndr.redis.queue.output.sessions"),
 							10, log); err != nil {
 							log.Error(err)
+							time.Sleep(1 * time.Second)
 						}
 						if err := stream.RedisBatchProcess(pipeline, alerts,
 							viper.GetString("run.stream.ndr.redis.queue.input.alerts"),
 							viper.GetString("run.stream.ndr.redis.queue.output.alerts"),
 							10, log); err != nil {
 							log.Error(err)
+							time.Sleep(1 * time.Second)
 						}
 					}
 				}
@@ -233,11 +232,8 @@ var runCmd = &cobra.Command{
 				DB:       viper.GetInt("run.stream.wise.redis.db"),
 			}
 			rdb := redis.NewClient(c)
-			if resp := rdb.Ping(context.TODO()); resp == nil {
-				return fmt.Errorf("Unable to ping redis at %s", c.Addr)
-			} else if err := resp.Err(); err != nil {
-				return err
-			}
+			stream.CheckRedisConn(poolCtx, rdb, log, c.Addr, "wise")
+			log.Info("wise redis handler started")
 		loop:
 			for item := range wiseCh {
 				encoded, err := models.Decoder.Marshal(item.Entry)
@@ -247,6 +243,7 @@ var runCmd = &cobra.Command{
 				}
 				if err := rdb.LPush(context.Background(), item.Key, encoded).Err(); err != nil {
 					log.Error(err)
+					time.Sleep(1 * time.Second)
 					continue loop
 				}
 			}

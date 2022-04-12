@@ -60,11 +60,10 @@ func ReadWinlogRedis(
 		DB:       c.Database,
 		Password: c.Password,
 	})
-	if resp := rdb.Ping(context.TODO()); resp == nil {
-		return fmt.Errorf("Unable to ping redis at %s", c.Host)
-	} else if err := resp.Err(); err != nil {
-		return err
+	if !CheckRedisConn(ctx, rdb, log, c.Host, "winlog") {
+		return nil
 	}
+	log.Info("winlog redis handler started")
 	pipeline := rdb.Pipeline()
 	defer pipeline.Close()
 
@@ -83,6 +82,7 @@ outer:
 		default:
 			if err := RedisBatchProcess(pipeline, w, c.Key, "", c.Batch, log); err != nil {
 				log.Error(err)
+				time.Sleep(1 * time.Second)
 			}
 		}
 	}
@@ -141,4 +141,36 @@ func RedisPushEntries(pipeline redis.Pipeliner, b enrich.Entries, key string) er
 	}
 	_, err := pipeline.Exec(context.Background())
 	return err
+}
+
+func CheckRedisConn(
+	ctx context.Context,
+	rdb *redis.Client,
+	log *logrus.Logger,
+	addr string,
+	name string,
+) bool {
+validate:
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+		}
+		var err error
+		if resp := rdb.Ping(context.TODO()); resp == nil {
+			err = fmt.Errorf("Unable to ping redis at %s", addr)
+		} else {
+			err = resp.Err()
+		}
+		if err != nil {
+			log.
+				WithField("task", name).
+				Error(err)
+			time.Sleep(5 * time.Second)
+		} else {
+			break validate
+		}
+	}
+	return true
 }
