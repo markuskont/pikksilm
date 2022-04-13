@@ -199,7 +199,7 @@ var runCmd = &cobra.Command{
 							WithField("ndr_alerts", alerts.Stats.Total).
 							WithField("ndr_enrichments", sessions.Stats.Enriched+alerts.Stats.Enriched).
 							WithField("asset_src", sessions.Stats.AssetSrc+alerts.Stats.AssetSrc).
-							WithField("asset_src", sessions.Stats.AssetDest+alerts.Stats.AssetDest).
+							WithField("asset_dest", sessions.Stats.AssetDest+alerts.Stats.AssetDest).
 							WithField(
 								"cid_missing",
 								sessions.Stats.MissingCommunityID+alerts.Stats.MissingCommunityID,
