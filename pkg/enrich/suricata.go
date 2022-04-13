@@ -16,6 +16,8 @@ type SuricataStats struct {
 	Total              int
 	MissingCommunityID int
 	Enriched           int
+	AssetSrc           int
+	AssetDest          int
 }
 
 type Suricata struct {
@@ -59,21 +61,23 @@ func (s *Suricata) checkEntries(e Entries) error {
 	})
 }
 
-func (s Suricata) checkAsset(e models.Entry, key string) {
+func (s Suricata) checkAsset(e models.Entry, key string) int {
 	if rawIP, ok := e.GetString(key); ok {
 		if addr := net.ParseIP(rawIP); addr != nil {
 			if a, is := s.Assets.Values[addr.String()]; is {
 				e.Set(a, "asset", key)
+				return 1
 			}
 		}
 	}
+	return 0
 }
 
 func (s *Suricata) Process(e models.Entry) (Entries, error) {
 	s.Stats.Total++
 	if s.Assets != nil {
-		s.checkAsset(e, "src_ip")
-		s.checkAsset(e, "dest_ip")
+		s.Stats.AssetSrc += s.checkAsset(e, "src_ip")
+		s.Stats.AssetDest += s.checkAsset(e, "dest_ip")
 	}
 	b, err := s.EVE.InsertCurrentAndGetVal(func(b *Bucket) error {
 		data, ok := b.Data.(Entries)

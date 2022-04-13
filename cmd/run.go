@@ -172,6 +172,10 @@ var runCmd = &cobra.Command{
 					if err != nil {
 						log.Fatal(err)
 					}
+					log.
+						WithField("path", assets).
+						WithField("count", len(parsed.Values)).
+						Info("parsed asset data")
 					alerts.Assets = parsed
 					sessions.Assets = parsed
 				}
@@ -194,6 +198,8 @@ var runCmd = &cobra.Command{
 							WithField("ndr_sessions", sessions.Stats.Total).
 							WithField("ndr_alerts", alerts.Stats.Total).
 							WithField("ndr_enrichments", sessions.Stats.Enriched+alerts.Stats.Enriched).
+							WithField("asset_src", sessions.Stats.AssetSrc+alerts.Stats.AssetSrc).
+							WithField("asset_src", sessions.Stats.AssetDest+alerts.Stats.AssetDest).
 							WithField(
 								"cid_missing",
 								sessions.Stats.MissingCommunityID+alerts.Stats.MissingCommunityID,
