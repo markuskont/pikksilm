@@ -138,8 +138,8 @@ func NewSuricata(c SuricataConfig) (*Suricata, error) {
 	}
 	eve, err := newBuckets(bucketsConfig{
 		BucketsConfig: BucketsConfig{
-			Count: 2,
-			Size:  3 * time.Second,
+			Count: 5,
+			Size:  2 * time.Second,
 		},
 		ContainerCreateFunc: newEntries,
 	})
