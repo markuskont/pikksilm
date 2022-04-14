@@ -219,16 +219,16 @@ var runCmd = &cobra.Command{
 						})
 						countEnrichPickups++
 					case <-tickRelease.C:
-						stream.RedisPushEntries(
-							pipeline,
-							sessions.CheckRelease(),
-							viper.GetString("run.stream.ndr.redis.queue.output.sessions"),
-						)
-						stream.RedisPushEntries(
-							pipeline,
-							sessions.CheckRelease(),
-							viper.GetString("run.stream.ndr.redis.queue.output.alerts"),
-						)
+						// stream.RedisPushEntries(
+						// 	pipeline,
+						// 	sessions.CheckRelease(),
+						// 	viper.GetString("run.stream.ndr.redis.queue.output.sessions"),
+						// )
+						// stream.RedisPushEntries(
+						// 	pipeline,
+						// 	sessions.CheckRelease(),
+						// 	viper.GetString("run.stream.ndr.redis.queue.output.alerts"),
+						// )
 					default:
 						if err := stream.RedisBatchProcess(pipeline, sessions,
 							viper.GetString("run.stream.ndr.redis.queue.input.sessions"),
