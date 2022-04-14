@@ -80,18 +80,23 @@ func (c *Winlog) Enrichments() <-chan Enrichment {
 func (c Winlog) CmdLen() int { return len(c.buckets.commands.Buckets) }
 
 func (c *Winlog) Process(e models.Entry) (Entries, error) {
-	provider, ok := e.GetString("event", "provider")
-	if !ok || provider != "Microsoft-Windows-Sysmon" {
-		c.Stats.InvalidEvent++
-		return nil, nil
-	}
-	entityID, ok := e.GetString("winlog", "event_data", "ProcessGuid")
+	// provider, ok := e.GetString("event", "provider")
+	// if !ok || provider != "Microsoft-Windows-Sysmon" {
+	// 	c.Stats.InvalidEvent++
+	// 	return nil, nil
+	// }
+	// entityID, ok := e.GetString("winlog", "event_data", "ProcessGuid")
+	// if !ok {
+	// 	entityID, ok = e.GetString("winlog", "event_data", "SourceProcessGUID")
+	// 	if !ok {
+	// 		c.Stats.MissingGUID++
+	// 		return nil, nil
+	// 	}
+	// }
+	entityID, ok := e.GetString("process", "entity_id")
 	if !ok {
-		entityID, ok = e.GetString("winlog", "event_data", "SourceProcessGUID")
-		if !ok {
-			c.Stats.MissingGUID++
-			return nil, nil
-		}
+		c.Stats.MissingGUID++
+		return nil, nil
 	}
 	eventID, ok := e.GetString("winlog", "event_id")
 	if !ok {
@@ -106,7 +111,7 @@ func (c *Winlog) Process(e models.Entry) (Entries, error) {
 	case "3":
 		c.Stats.CountNetwork++
 		// network event
-		ne, err := models.ExtractNetworkEntryBase(e, entityID)
+		ne, err := models.ExtractNetworkEntryECS(e, entityID)
 		if err != nil {
 			return nil, err
 		}
