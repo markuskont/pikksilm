@@ -19,6 +19,7 @@ type WinlogStats struct {
 	Count           int
 	CountCommand    int
 	CountNetwork    int
+	InvalidEvent    int
 	MissingGUID     int
 	MissingEventID  int
 	SeenGUID        map[string]bool
@@ -36,6 +37,7 @@ func (ws WinlogStats) Fields() map[string]any {
 		"net_events_popped": ws.NetEventsPopped,
 		"cmd_bucket_moves":  ws.CmdBucketMoves,
 		"guid_missing":      ws.MissingGUID,
+		"invalid_event":     ws.InvalidEvent,
 	}
 }
 
@@ -78,13 +80,18 @@ func (c *Winlog) Enrichments() <-chan Enrichment {
 func (c Winlog) CmdLen() int { return len(c.buckets.commands.Buckets) }
 
 func (c *Winlog) Process(e models.Entry) (Entries, error) {
-	entityID, ok := e.GetString("process", "entity_id")
-	if !ok {
-		c.Stats.MissingGUID++
-		// TODO - return ErrInvalidEvent instead, needs type switch on caller,
-		// as early return here is common for mixed streams. So it's not an error,
-		// just invalid event
+	provider, ok := e.GetString("event", "provider")
+	if !ok || provider != "Microsoft-Windows-Sysmon" {
+		c.Stats.InvalidEvent++
 		return nil, nil
+	}
+	entityID, ok := e.GetString("winlog", "event_data", "ProcessGuid")
+	if !ok {
+		entityID, ok = e.GetString("winlog", "event_data", "SourceProcessGUID")
+		if !ok {
+			c.Stats.MissingGUID++
+			return nil, nil
+		}
 	}
 	eventID, ok := e.GetString("winlog", "event_id")
 	if !ok {
@@ -99,7 +106,7 @@ func (c *Winlog) Process(e models.Entry) (Entries, error) {
 	case "3":
 		c.Stats.CountNetwork++
 		// network event
-		ne, err := models.ExtractNetworkEntry(e, entityID)
+		ne, err := models.ExtractNetworkEntryBase(e, entityID)
 		if err != nil {
 			return nil, err
 		}
