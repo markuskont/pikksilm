@@ -9,12 +9,10 @@ import (
 )
 
 type Asset struct {
-	OrgAbbrev string `json:"org_abbrev,omitempty"`
-	Subnet    string `json:"subnet,omitempty"`
-	Name      string `json:"name,omitempty"`
-	Addr      string `json:"addr,omitempty"`
-	Green     bool   `json:"green,omitempty"`
-	OrgSub    string `json:"org_sub,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Addr        string `json:"addr,omitempty"`
+	Team        string `json:"green,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 type Assets struct {
