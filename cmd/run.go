@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -265,7 +266,7 @@ var runCmd = &cobra.Command{
 			log.Info("wise redis handler started")
 		loop:
 			for item := range wiseCh {
-				encoded, err := models.Decoder.Marshal(item.Entry)
+				encoded, err := json.Marshal(item.Entry)
 				if err != nil {
 					log.Error(err)
 					continue loop

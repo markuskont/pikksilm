@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"encoding/json"
 	"os"
 	"time"
 
@@ -91,7 +92,7 @@ var replayCmd = &cobra.Command{
 				default:
 				}
 
-				if err := models.Decoder.Unmarshal(scanner.Bytes(), &e); err != nil {
+				if err := json.Unmarshal(scanner.Bytes(), &e); err != nil {
 					return err
 				}
 				ts, ok, err := e.GetTimestamp(keyTS)
@@ -187,7 +188,7 @@ var replayCmd = &cobra.Command{
 				default:
 				}
 
-				if err := models.Decoder.Unmarshal(scanner.Bytes(), &e); err != nil {
+				if err := json.Unmarshal(scanner.Bytes(), &e); err != nil {
 					return err
 				}
 				ts, ok, err := e.GetTimestamp(keyTS)

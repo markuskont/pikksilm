@@ -7,11 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/satta/gommunityid"
 )
-
-var Decoder = jsoniter.ConfigCompatibleWithStandardLibrary
 
 const ArgTimeFormat = "2006-01-02 15:04:05"
 

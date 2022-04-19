@@ -1,11 +1,10 @@
 package enrich
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
-
-	"github.com/markuskont/pikksilm/pkg/models"
 )
 
 type Asset struct {
@@ -26,7 +25,7 @@ func NewAssets(path string) (*Assets, error) {
 	}
 	defer f.Close()
 	var obj []Asset
-	if err := models.Decoder.NewDecoder(f).Decode(&obj); err != nil {
+	if err := json.NewDecoder(f).Decode(&obj); err != nil {
 		return nil, err
 	}
 	vals := make(map[string]Asset)
