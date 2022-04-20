@@ -71,6 +71,9 @@ func ReadWinlogRedis(
 	tick := time.NewTicker(10 * time.Second)
 	defer tick.Stop()
 
+	tickPersist := time.NewTicker(3 * time.Second)
+	defer tickPersist.Stop()
+
 outer:
 	for {
 		select {
@@ -78,6 +81,10 @@ outer:
 			log.
 				WithFields(w.Stats.Fields()).
 				Info("EDR report")
+		case <-tickPersist.C:
+			if err := w.Persist(); err != nil {
+				log.Error(err)
+			}
 		case <-ctx.Done():
 			break outer
 		default:
