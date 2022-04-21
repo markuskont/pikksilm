@@ -71,7 +71,7 @@ func ReadWinlogRedis(
 	tick := time.NewTicker(10 * time.Second)
 	defer tick.Stop()
 
-	tickPersist := time.NewTicker(3 * time.Second)
+	tickPersist := time.NewTicker(30 * time.Second)
 	defer tickPersist.Stop()
 
 outer:
