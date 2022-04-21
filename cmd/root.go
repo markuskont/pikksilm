@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -14,6 +15,7 @@ import (
 
 var cfgFile string
 var log = logrus.New()
+var mu = sync.RWMutex{}
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{

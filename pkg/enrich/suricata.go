@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/markuskont/pikksilm/pkg/models"
@@ -29,6 +30,8 @@ type Suricata struct {
 	Stats SuricataStats
 
 	Assets *Assets
+
+	mu *sync.RWMutex
 
 	enrichmentWriter io.WriteCloser
 	log              *logrus.Logger
@@ -65,7 +68,9 @@ func (s Suricata) checkAsset(e models.Entry, key string) int {
 	if rawIP, ok := e.GetString(key); ok {
 		if addr := net.ParseIP(rawIP); addr != nil {
 			if a, is := s.Assets.Values[addr.String()]; is {
+				s.mu.Lock()
 				e.Set(a, "asset", key)
+				s.mu.Unlock()
 				return 1
 			}
 		}
@@ -124,6 +129,7 @@ type SuricataConfig struct {
 	EnrichedJSONPath string
 
 	CommandBuckets BucketsConfig
+	Mu             *sync.RWMutex
 }
 
 func NewSuricata(c SuricataConfig) (*Suricata, error) {
@@ -146,7 +152,7 @@ func NewSuricata(c SuricataConfig) (*Suricata, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Suricata{Commands: commands, EVE: eve}
+	s := &Suricata{Commands: commands, EVE: eve, mu: c.Mu}
 	if c.EnrichedJSONPath != "" {
 		f, err := os.Create(c.EnrichedJSONPath)
 		if err != nil {
