@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/markuskont/pikksilm/pkg/models"
@@ -141,15 +143,15 @@ func NewSuricata(c SuricataConfig) (*Suricata, error) {
 	}
 	eve, err := newBuckets(bucketsConfig{
 		BucketsConfig: BucketsConfig{
-			Count: 2,
-			Size:  3 * time.Second,
+			Count: 5,
+			Size:  2 * time.Second,
 		},
 		ContainerCreateFunc: newEntries,
 	})
 	if err != nil {
 		return nil, err
 	}
-	s := &Suricata{Commands: commands, EVE: eve}
+	s := &Suricata{Commands: commands, EVE: eve, mu: c.Mu}
 	if c.EnrichedJSONPath != "" {
 		f, err := os.Create(c.EnrichedJSONPath)
 		if err != nil {
