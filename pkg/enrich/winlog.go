@@ -105,7 +105,7 @@ func (c *Winlog) Process(e models.Entry) (Entries, error) {
 	case "3":
 		c.Stats.CountNetwork++
 		// network event
-		ne, err := models.ExtractNetworkEntry(e, entityID)
+		ne, err := models.ExtractNetworkEntryECS(e, entityID)
 		if err != nil {
 			return nil, err
 		}

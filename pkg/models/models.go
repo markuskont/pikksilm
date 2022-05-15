@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	jsoniter "github.com/json-iterator/go"
@@ -139,7 +140,69 @@ func (n NetworkEntry) CommunityID(cid gommunityid.CommunityID) (string, error) {
 	return cid.CalcBase64(ft), nil
 }
 
-func ExtractNetworkEntry(e Entry, guid string) (*NetworkEntry, error) {
+func ExtractNetworkEntryBase(e Entry, guid string) (*NetworkEntry, error) {
+	proto, ok := e.GetString("winlog", "event_data", "Protocol")
+	if !ok {
+		return nil, errors.New("missing transport")
+	}
+
+	srcPort, ok := e.GetString("winlog", "event_data", "SourcePort")
+	if !ok {
+		return nil, errors.New("missing source port")
+	}
+	parsedSrcPort, err := strconv.Atoi(srcPort)
+	if err != nil {
+		return nil, fmt.Errorf("invalid source port %s", srcPort)
+	}
+
+	destPort, ok := e.GetString("winlog", "event_data", "DestinationPort")
+	if !ok {
+		return nil, errors.New("missing destination port")
+	}
+	parsedDestPort, err := strconv.Atoi(destPort)
+	if err != nil {
+		return nil, fmt.Errorf("invalid destination port %s", srcPort)
+	}
+
+	srcIP, ok := e.GetString("winlog", "event_data", "SourceIp")
+	if !ok {
+		return nil, errors.New("missing source IP")
+	}
+	parsedSrcIP := net.ParseIP(srcIP)
+	if parsedSrcIP == nil {
+		return nil, fmt.Errorf("invalid IP %v", parsedSrcIP)
+	}
+
+	destIP, ok := e.GetString("winlog", "event_data", "DestinationIp")
+	if !ok {
+		return nil, errors.New("missing destination IP")
+	}
+	parsedDestIP := net.ParseIP(destIP)
+	if parsedDestIP == nil {
+		return nil, fmt.Errorf("invalid IP %v", parsedDestIP)
+	}
+
+	if guid == "" {
+		guid, ok = e.GetString("winlog", "event_data", "ProcessGuid")
+		if !ok {
+			guid, ok = e.GetString("winlog", "event_data", "SourceProcessGUID")
+			if !ok {
+				return nil, fmt.Errorf("missing GUID")
+			}
+		}
+	}
+
+	return &NetworkEntry{
+		Proto:    proto,
+		SrcIP:    parsedSrcIP,
+		SrcPort:  uint16(parsedSrcPort),
+		DestPort: uint16(parsedDestPort),
+		DestIP:   parsedDestIP,
+		GUID:     guid,
+	}, nil
+}
+
+func ExtractNetworkEntryECS(e Entry, guid string) (*NetworkEntry, error) {
 	proto, ok := e.GetString("network", "transport")
 	if !ok {
 		return nil, errors.New("missing transport")
