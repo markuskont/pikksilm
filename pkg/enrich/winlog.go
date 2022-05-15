@@ -214,15 +214,7 @@ func (c *Winlog) Process(e models.Entry) (Entries, error) {
 
 func (c *Winlog) send(e models.Entry, key string) {
 	c.Stats.Enriched++
-	select {
-	case c.enrichments <- Enrichment{
-		Entry: e,
-		Key:   key,
-	}:
-		c.Stats.Sent++
-	default:
-		c.Stats.Dropped++
-	}
+	c.enrichments <- Enrichment{Entry: e, Key: key}
 }
 
 type WinlogBucketsConfig struct {
