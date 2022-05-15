@@ -62,16 +62,22 @@ type Winlog struct {
 	// for potential out of order messages, is memory intentsive
 	storeNetEvents bool
 
+	mu *sync.RWMutex
+
 	Stats WinlogStats
 }
 
-func (c *Winlog) Close() error {
+func (c Winlog) Persist() error {
 	if c.persistCommand != "" {
 		if err := dumpBucketPersist(c.persistCommand, *c.buckets.commands); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (c *Winlog) Close() error {
+	return c.Persist()
 }
 
 func (c *Winlog) Enrichments() <-chan Enrichment {
