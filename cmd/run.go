@@ -62,6 +62,7 @@ var runCmd = &cobra.Command{
 				StoreNetEvents: viper.GetBool("run.buckets.net.enable"),
 				Destination:    ch,
 				WorkDir:        viper.GetString("run.dir.dump"),
+				Mu:             &mu,
 			})
 			if err != nil {
 				return err
@@ -150,6 +151,7 @@ var runCmd = &cobra.Command{
 					enrich.SuricataConfig{
 						EnrichedJSONPath: logSessions,
 						CommandBuckets:   cc,
+						Mu:               &mu,
 					},
 				)
 				if err != nil {
@@ -160,6 +162,7 @@ var runCmd = &cobra.Command{
 					enrich.SuricataConfig{
 						EnrichedJSONPath: logAlerts,
 						CommandBuckets:   cc,
+						Mu:               &mu,
 					},
 				)
 				if err != nil {
@@ -250,11 +253,13 @@ var runCmd = &cobra.Command{
 			log.Info("wise redis handler started")
 		loop:
 			for item := range wiseCh {
+				mu.Lock()
 				encoded, err := models.Decoder.Marshal(item.Entry)
 				if err != nil {
 					log.Error(err)
 					continue loop
 				}
+				mu.Unlock()
 				if err := rdb.LPush(context.Background(), item.Key, encoded).Err(); err != nil {
 					log.Error(err)
 					time.Sleep(1 * time.Second)

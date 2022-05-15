@@ -3,6 +3,7 @@ package enrich
 import (
 	"errors"
 	"path"
+	"sync"
 
 	"github.com/markuskont/pikksilm/pkg/models"
 	"github.com/satta/gommunityid"
@@ -119,7 +120,9 @@ func (c *Winlog) Process(e models.Entry) (Entries, error) {
 			if err != nil {
 				return err
 			}
+			c.mu.Lock()
 			command.Set(id, "network", "community_id")
+			c.mu.Unlock()
 			c.send(command, id)
 			found = true
 			// command was already found in latest bucket, no need to move it
@@ -188,7 +191,9 @@ func (c *Winlog) Process(e models.Entry) (Entries, error) {
 							return err
 						}
 						c.Stats.NetEventsPopped++
+						c.mu.Lock()
 						e.Set(id, "network", "community_id")
+						c.mu.Unlock()
 						c.send(e, id)
 					}
 				}
@@ -225,6 +230,7 @@ type WinlogConfig struct {
 	StoreNetEvents bool
 	WorkDir        string
 	Destination    chan Enrichment
+	Mu             *sync.RWMutex
 }
 
 func NewWinlog(c WinlogConfig) (*Winlog, error) {
@@ -235,6 +241,7 @@ func NewWinlog(c WinlogConfig) (*Winlog, error) {
 	w := &Winlog{
 		CommunityID:    cid,
 		storeNetEvents: c.StoreNetEvents,
+		mu:             c.Mu,
 	}
 
 	if c.WorkDir != "" {

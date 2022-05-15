@@ -103,6 +103,7 @@ type SuricataConfig struct {
 	EnrichedJSONPath string
 
 	CommandBuckets BucketsConfig
+	Mu             *sync.RWMutex
 }
 
 func NewSuricata(c SuricataConfig) (*Suricata, error) {
