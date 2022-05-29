@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/json-iterator/go v1.1.12
+	github.com/markuskont/datamodels v0.0.1
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/satta/gommunityid v0.0.0-20210315182841-1cdcb73ce408
 	github.com/sirupsen/logrus v1.8.1
@@ -24,7 +25,6 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/magiconair/properties v1.8.6 // indirect
-	github.com/markuskont/datamodels v0.0.1 // indirect
 	github.com/mitchellh/mapstructure v1.4.3 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
