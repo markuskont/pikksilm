@@ -13,9 +13,5 @@ type Enrichment struct {
 }
 
 type Processor interface {
-	Process(datamodels.Map) (Entries, error)
-}
-
-type EntriesCheker interface {
-	CheckEntries(Entries) error
+	Process(datamodels.Map) (entries, error)
 }

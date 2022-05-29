@@ -28,7 +28,7 @@ loop:
 			break loop
 		case <-tick.C:
 			log.
-				WithFields(w.Stats.Fields()).
+				WithFields(w.Stats.fields()).
 				Info("EDR report")
 		default:
 			var e datamodels.Map
@@ -77,10 +77,10 @@ outer:
 		select {
 		case <-tick.C:
 			log.
-				WithFields(w.Stats.Fields()).
+				WithFields(w.Stats.fields()).
 				Info("EDR report")
 		case <-tickPersist.C:
-			if err := w.Persist(); err != nil {
+			if err := w.persist(); err != nil {
 				log.Error(err)
 			}
 		case <-ctx.Done():
@@ -128,7 +128,7 @@ loop:
 			continue loop
 		}
 		if bulk != nil && dest != "" {
-			if err := RedisPushEntries(pipeline, bulk, dest); err != nil {
+			if err := redisPushEntries(pipeline, bulk, dest); err != nil {
 				log.Error(err)
 				continue loop
 			}
@@ -137,7 +137,7 @@ loop:
 	return err
 }
 
-func RedisPushEntries(pipeline redis.Pipeliner, b Entries, key string) error {
+func redisPushEntries(pipeline redis.Pipeliner, b entries, key string) error {
 	if len(b) == 0 {
 		return nil
 	}

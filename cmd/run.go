@@ -301,8 +301,7 @@ func init() {
 	pFlags.Bool("stream-ndr-enabled", false, "Enable NDR (Suricata) enrichment")
 	viper.BindPFlag("run.stream.ndr.enabled", pFlags.Lookup("stream-ndr-enabled"))
 
-	pFlags.Bool("stream-ndr-log-enrichments", false, "Enable logging of enriched NDR events."+
-		" Requires --dir-dump to be configured")
+	pFlags.Bool("stream-ndr-log-enrichments", false, "Enable logging of enriched NDR events. Requires --dir-dump to be configured")
 	viper.BindPFlag("run.stream.ndr.log.enrichments", pFlags.Lookup("stream-ndr-log-enrichments"))
 
 	addConfigRedisQueue(pFlags, "edr", "input", "winlogbeat", "EDR events input")

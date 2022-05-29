@@ -10,11 +10,9 @@ import (
 	"github.com/satta/gommunityid"
 )
 
-const ArgTimeFormat = "2006-01-02 15:04:05"
-
-// NetworkEntry is simplified event_id 3 entry that can be kept in memory with lower overhead.
+// networkEntry is simplified event_id 3 entry that can be kept in memory with lower overhead.
 // It is used to generate community ID
-type NetworkEntry struct {
+type networkEntry struct {
 	SrcIP    net.IP `json:"src_ip,omitempty"`
 	DestIP   net.IP `json:"dest_ip,omitempty"`
 	SrcPort  uint16 `json:"src_port,omitempty"`
@@ -23,7 +21,7 @@ type NetworkEntry struct {
 	GUID     string `json:"guid,omitempty"`
 }
 
-func (n NetworkEntry) CommunityID(cid gommunityid.CommunityID) (string, error) {
+func (n networkEntry) communityID(cid gommunityid.CommunityID) (string, error) {
 	var ft gommunityid.FlowTuple
 	switch n.Proto {
 	case "tcp":
@@ -38,7 +36,7 @@ func (n NetworkEntry) CommunityID(cid gommunityid.CommunityID) (string, error) {
 	return cid.CalcBase64(ft), nil
 }
 
-func ExtractNetworkEntryBase(e datamodels.Map, guid string) (*NetworkEntry, error) {
+func extractNetworkEntryBase(e datamodels.Map, guid string) (*networkEntry, error) {
 	proto, ok := e.GetString("winlog", "event_data", "Protocol")
 	if !ok {
 		return nil, errors.New("missing transport")
@@ -90,7 +88,7 @@ func ExtractNetworkEntryBase(e datamodels.Map, guid string) (*NetworkEntry, erro
 		}
 	}
 
-	return &NetworkEntry{
+	return &networkEntry{
 		Proto:    proto,
 		SrcIP:    parsedSrcIP,
 		SrcPort:  uint16(parsedSrcPort),
@@ -100,7 +98,7 @@ func ExtractNetworkEntryBase(e datamodels.Map, guid string) (*NetworkEntry, erro
 	}, nil
 }
 
-func ExtractNetworkEntryECS(e datamodels.Map, guid string) (*NetworkEntry, error) {
+func extractNetworkEntryECS(e datamodels.Map, guid string) (*networkEntry, error) {
 	proto, ok := e.GetString("network", "transport")
 	if !ok {
 		return nil, errors.New("missing transport")
@@ -147,7 +145,7 @@ func ExtractNetworkEntryECS(e datamodels.Map, guid string) (*NetworkEntry, error
 		}
 	}
 
-	return &NetworkEntry{
+	return &networkEntry{
 		Proto:    proto,
 		SrcIP:    parsedSrcIP,
 		SrcPort:  uint16(srcPort),
@@ -165,7 +163,7 @@ type ConfigRedisInstance struct {
 	Password string
 }
 
-type WiseEntry struct {
+type wiseEntry struct {
 	ProcessName string `json:"processname"`
 	UserName    string `json:"username"`
 	HostName    string `json:"hostname"`

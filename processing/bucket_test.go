@@ -40,25 +40,25 @@ func TestInsertCurrent(t *testing.T) {
 	b, err := newBuckets(
 		bucketsConfig{
 			BucketsConfig:       cfg,
-			ContainerCreateFunc: func() any { return make(NetworkEvents, 0) },
+			ContainerCreateFunc: func() any { return make(networkEvents, 0) },
 		},
 	)
 	assert.Nil(t, err)
 
 	b.InsertCurrent(func(b *Bucket) error {
-		data, ok := b.Data.(NetworkEvents)
+		data, ok := b.Data.(networkEvents)
 		assert.True(t, ok)
-		data = append(data, NetworkEntry{
+		data = append(data, networkEntry{
 			SrcIP: net.ParseIP("1.2.3.4"),
 		})
-		data = append(data, NetworkEntry{
+		data = append(data, networkEntry{
 			SrcIP: net.ParseIP("5.6.7.8"),
 		})
 		b.Data = data
 		return nil
 	})
-	assert.Equal(t, "1.2.3.4", b.Buckets[0].Data.(NetworkEvents)[0].SrcIP.String())
-	assert.Equal(t, "5.6.7.8", b.Buckets[0].Data.(NetworkEvents)[1].SrcIP.String())
+	assert.Equal(t, "1.2.3.4", b.Buckets[0].Data.(networkEvents)[0].SrcIP.String())
+	assert.Equal(t, "5.6.7.8", b.Buckets[0].Data.(networkEvents)[1].SrcIP.String())
 }
 
 func TestBucketExpand(t *testing.T) {
@@ -67,12 +67,12 @@ func TestBucketExpand(t *testing.T) {
 	buckets, err := newBuckets(
 		bucketsConfig{
 			BucketsConfig:       cfg,
-			ContainerCreateFunc: func() any { return make(NetworkEvents, 0) },
+			ContainerCreateFunc: func() any { return make(networkEvents, 0) },
 		},
 	)
 	assert.Nil(t, err)
 
-	val1 := NetworkEvents{
+	val1 := networkEvents{
 		{SrcIP: net.IPv4(1, 1, 1, 1)},
 	}
 	_, err = buckets.insert(func(b *Bucket) error {
@@ -80,7 +80,7 @@ func TestBucketExpand(t *testing.T) {
 		return nil
 	}, ts)
 	assert.Nil(t, err)
-	val2 := NetworkEvents{
+	val2 := networkEvents{
 		{SrcIP: net.IPv4(1, 1, 2, 1)},
 	}
 	_, err = buckets.insert(func(b *Bucket) error {
@@ -88,7 +88,7 @@ func TestBucketExpand(t *testing.T) {
 		return nil
 	}, ts.Add(6*time.Second))
 	assert.Nil(t, err)
-	val3 := NetworkEvents{
+	val3 := networkEvents{
 		{SrcIP: net.IPv4(1, 1, 3, 1)},
 	}
 	_, err = buckets.insert(func(b *Bucket) error {
@@ -96,7 +96,7 @@ func TestBucketExpand(t *testing.T) {
 		return nil
 	}, ts.Add(12*time.Second))
 	assert.Nil(t, err)
-	val4 := NetworkEvents{
+	val4 := networkEvents{
 		{SrcIP: net.IPv4(1, 1, 4, 1)},
 	}
 	_, err = buckets.insert(func(b *Bucket) error {
@@ -104,7 +104,7 @@ func TestBucketExpand(t *testing.T) {
 		return nil
 	}, ts.Add(18*time.Second))
 	assert.Nil(t, err)
-	val4expandded := append(val4, NetworkEntry{SrcIP: net.IPv4(1, 1, 4, 2)})
+	val4expandded := append(val4, networkEntry{SrcIP: net.IPv4(1, 1, 4, 2)})
 	_, err = buckets.insert(func(b *Bucket) error {
 		b.Data = val4expandded
 		return nil
@@ -112,5 +112,5 @@ func TestBucketExpand(t *testing.T) {
 	assert.Nil(t, err)
 
 	assert.Equal(t, 3, len(buckets.Buckets))
-	assert.Equal(t, val4expandded, buckets.Buckets[2].Data.(NetworkEvents))
+	assert.Equal(t, val4expandded, buckets.Buckets[2].Data.(networkEvents))
 }

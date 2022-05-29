@@ -11,7 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type SuricataStats struct {
+type suricataStats struct {
 	Total              int
 	MissingCommunityID int
 	Enriched           int
@@ -19,18 +19,18 @@ type SuricataStats struct {
 
 type Suricata struct {
 	// cached edr enrichment from Winlog handler
-	Commands *Buckets
+	Commands *buckets
 	// Suricata EVE logs
-	EVE *Buckets
+	EVE *buckets
 
-	Stats SuricataStats
+	Stats suricataStats
 
 	enrichmentWriter io.WriteCloser
 	log              *logrus.Logger
 	mu               *sync.RWMutex
 }
 
-func (s *Suricata) checkEntries(e Entries) error {
+func (s *Suricata) checkEntries(e entries) error {
 	return s.Commands.Check(func(b *Bucket) error {
 		edr, ok := b.Data.(CommandEvents)
 		if !ok {
@@ -57,10 +57,10 @@ func (s *Suricata) checkEntries(e Entries) error {
 	})
 }
 
-func (s *Suricata) Process(e datamodels.Map) (Entries, error) {
+func (s *Suricata) Process(e datamodels.Map) (entries, error) {
 	s.Stats.Total++
 	b, err := s.EVE.InsertCurrentAndGetVal(func(b *Bucket) error {
-		data, ok := b.Data.(Entries)
+		data, ok := b.Data.(entries)
 		if !ok {
 			return errors.New("ndr data cache wrong type")
 		}
@@ -71,12 +71,6 @@ func (s *Suricata) Process(e datamodels.Map) (Entries, error) {
 		return nil, err
 	}
 	return s.checkBucket(b)
-}
-
-func (s Suricata) CheckRelease() Entries {
-	b, _ := s.EVE.InsertCurrentAndGetVal(func(b *Bucket) error { return nil })
-	e, _ := s.checkBucket(b)
-	return e
 }
 
 func (s Suricata) writeEnrichedEntry(e datamodels.Map) error {
@@ -138,11 +132,11 @@ func NewSuricata(c SuricataConfig) (*Suricata, error) {
 	return s, nil
 }
 
-func (s Suricata) checkBucket(b *Bucket) (Entries, error) {
+func (s Suricata) checkBucket(b *Bucket) (entries, error) {
 	if b == nil {
 		return nil, nil
 	}
-	data, ok := b.Data.(Entries)
+	data, ok := b.Data.(entries)
 	if !ok {
 		return nil, errors.New("ndr data cache wrong type")
 	}

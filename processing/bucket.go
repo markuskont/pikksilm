@@ -10,21 +10,22 @@ import (
 	"github.com/markuskont/datamodels"
 )
 
-type BucketHandlerFunc func(*Bucket) error
-type ContainerCreateFunc func() any
+type bucketHandlerFunc func(*Bucket) error
+type containerCreateFunc func() any
 
-type Entries []datamodels.Map
-type NetworkEvents []NetworkEntry
+type entries []datamodels.Map
+type networkEvents []networkEntry
+
 type CommandEvents map[string]datamodels.Map
 
-func newEntries() any { return make(Entries, 0) }
+func newEntries() any { return make(entries, 0) }
 
 type Bucket struct {
 	Data any
 	Time time.Time
 }
 
-func NewBucket(ts time.Time, fn ContainerCreateFunc) *Bucket {
+func newBucket(ts time.Time, fn containerCreateFunc) *Bucket {
 	b := &Bucket{Time: ts}
 	if fn != nil {
 		b.Data = fn()
@@ -32,7 +33,7 @@ func NewBucket(ts time.Time, fn ContainerCreateFunc) *Bucket {
 	return b
 }
 
-type Buckets struct {
+type buckets struct {
 	Buckets []Bucket
 	Size    time.Duration
 	Count   int
@@ -41,10 +42,10 @@ type Buckets struct {
 
 	// execute this function whenever new bucket is created
 	// for initializing data container
-	onCreateFunc ContainerCreateFunc
+	onCreateFunc containerCreateFunc
 }
 
-func (b *Buckets) insert(fn BucketHandlerFunc, ts time.Time) (*Bucket, error) {
+func (b *buckets) insert(fn bucketHandlerFunc, ts time.Time) (*Bucket, error) {
 	rotated, err := b.tryRotate(ts)
 	if err != nil {
 		return rotated, err
@@ -52,7 +53,7 @@ func (b *Buckets) insert(fn BucketHandlerFunc, ts time.Time) (*Bucket, error) {
 	return rotated, fn(&b.Buckets[len(b.Buckets)-1])
 }
 
-func (b *Buckets) InsertCurrent(fn BucketHandlerFunc) error {
+func (b *buckets) InsertCurrent(fn bucketHandlerFunc) error {
 	_, err := b.InsertCurrentAndGetVal(fn)
 	return err
 }
@@ -60,11 +61,11 @@ func (b *Buckets) InsertCurrent(fn BucketHandlerFunc) error {
 // InsertCurrentAndRetrieve wraps around InsertCurrent but returns dropped
 // bucket in case there was successful rotation. If nothing got rotated, then
 // first return value is nil.
-func (b *Buckets) InsertCurrentAndGetVal(fn BucketHandlerFunc) (*Bucket, error) {
+func (b *buckets) InsertCurrentAndGetVal(fn bucketHandlerFunc) (*Bucket, error) {
 	return b.insert(fn, time.Now())
 }
 
-func (b *Buckets) check(fn BucketHandlerFunc, ts time.Time) error {
+func (b *buckets) check(fn bucketHandlerFunc, ts time.Time) error {
 	for i := range b.Buckets {
 		if err := fn(&b.Buckets[i]); err != nil {
 			return err
@@ -73,16 +74,16 @@ func (b *Buckets) check(fn BucketHandlerFunc, ts time.Time) error {
 	return nil
 }
 
-func (b *Buckets) Check(fn BucketHandlerFunc) error {
+func (b *buckets) Check(fn bucketHandlerFunc) error {
 	return b.check(fn, time.Now())
 }
 
-func (b *Buckets) tryRotate(ts time.Time) (*Bucket, error) {
+func (b *buckets) tryRotate(ts time.Time) (*Bucket, error) {
 	// append new bucket in case period is exceeded
 	if b.Current.IsZero() || b.rollover(ts) {
 		b.Current = ts.Truncate(b.Size)
 		b.First = b.Current
-		b.Buckets = append(b.Buckets, *NewBucket(b.Current, b.onCreateFunc))
+		b.Buckets = append(b.Buckets, *newBucket(b.Current, b.onCreateFunc))
 	}
 	// truncate bucket set in case current count is above max
 	if current := len(b.Buckets); current > 1 && current > b.Count {
@@ -93,7 +94,7 @@ func (b *Buckets) tryRotate(ts time.Time) (*Bucket, error) {
 	return nil, nil
 }
 
-func (b Buckets) rollover(ts time.Time) bool {
+func (b buckets) rollover(ts time.Time) bool {
 	since := ts.Sub(b.Current)
 	return since > b.Size
 }
@@ -110,12 +111,12 @@ type bucketsConfig struct {
 	BucketsConfig
 	// ContainerCreateFunc can be empty value,
 	// in that case user is responsible for checking that b.Data is not nil
-	ContainerCreateFunc ContainerCreateFunc
+	ContainerCreateFunc containerCreateFunc
 
 	Persist string
 }
 
-func newBuckets(c bucketsConfig) (*Buckets, error) {
+func newBuckets(c bucketsConfig) (*buckets, error) {
 	if c.Count < 1 {
 		return nil, fmt.Errorf("invalid bucket count %d", c.Count)
 	}
@@ -128,7 +129,7 @@ func newBuckets(c bucketsConfig) (*Buckets, error) {
 			return readCmdBucketData(c.Persist, c.ContainerCreateFunc)
 		}
 	}
-	return &Buckets{
+	return &buckets{
 		Buckets:      make([]Bucket, 0, c.Count),
 		Size:         c.Size,
 		Count:        c.Count,
@@ -136,7 +137,7 @@ func newBuckets(c bucketsConfig) (*Buckets, error) {
 	}, nil
 }
 
-func readBucketPersist(path string, ccFunc ContainerCreateFunc) (*Buckets, error) {
+func readBucketPersist(path string, ccFunc containerCreateFunc) (*buckets, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -147,7 +148,7 @@ func readBucketPersist(path string, ccFunc ContainerCreateFunc) (*Buckets, error
 		return nil, err
 	}
 	defer gr.Close()
-	var obj Buckets
+	var obj buckets
 	if err := json.NewDecoder(gr).Decode(&obj); err != nil {
 		return nil, err
 	}
@@ -174,7 +175,7 @@ func castConcreteCmdEvents(buckets []Bucket) {
 	}
 }
 
-func readCmdBucketData(path string, ccFunc ContainerCreateFunc) (*Buckets, error) {
+func readCmdBucketData(path string, ccFunc containerCreateFunc) (*buckets, error) {
 	b, err := readBucketPersist(path, ccFunc)
 	if err != nil {
 		return nil, err
@@ -183,7 +184,7 @@ func readCmdBucketData(path string, ccFunc ContainerCreateFunc) (*Buckets, error
 	return b, nil
 }
 
-func dumpBucketPersist(path string, b Buckets) error {
+func dumpBucketPersist(path string, b buckets) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err

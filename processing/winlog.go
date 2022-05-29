@@ -9,7 +9,7 @@ import (
 	"github.com/satta/gommunityid"
 )
 
-type WinlogStats struct {
+type winlogStats struct {
 	// general statistics
 	Enriched        int
 	Sent            int
@@ -26,7 +26,7 @@ type WinlogStats struct {
 	SeenGUID        map[string]bool
 }
 
-func (ws WinlogStats) Fields() map[string]any {
+func (ws winlogStats) fields() map[string]any {
 	return map[string]any{
 		"enriched":          ws.Enriched,
 		"emitted":           ws.Sent,
@@ -43,8 +43,8 @@ func (ws WinlogStats) Fields() map[string]any {
 }
 
 type winlogBuckets struct {
-	network  *Buckets
-	commands *Buckets
+	network  *buckets
+	commands *buckets
 }
 
 // Winlog is handler for enrichment
@@ -64,10 +64,10 @@ type Winlog struct {
 
 	mu *sync.RWMutex
 
-	Stats WinlogStats
+	Stats winlogStats
 }
 
-func (c Winlog) Persist() error {
+func (c Winlog) persist() error {
 	if c.persistCommand != "" {
 		if err := dumpBucketPersist(c.persistCommand, *c.buckets.commands); err != nil {
 			return err
@@ -77,7 +77,7 @@ func (c Winlog) Persist() error {
 }
 
 func (c *Winlog) Close() error {
-	return c.Persist()
+	return c.persist()
 }
 
 func (c *Winlog) Enrichments() <-chan Enrichment {
@@ -86,7 +86,7 @@ func (c *Winlog) Enrichments() <-chan Enrichment {
 
 func (c Winlog) CmdLen() int { return len(c.buckets.commands.Buckets) }
 
-func (c *Winlog) Process(e datamodels.Map) (Entries, error) {
+func (c *Winlog) Process(e datamodels.Map) (entries, error) {
 	entityID, ok := e.GetString("process", "entity_id")
 	if !ok {
 		c.Stats.MissingGUID++
@@ -105,7 +105,7 @@ func (c *Winlog) Process(e datamodels.Map) (Entries, error) {
 	case "3":
 		c.Stats.CountNetwork++
 		// network event
-		ne, err := ExtractNetworkEntryECS(e, entityID)
+		ne, err := extractNetworkEntryECS(e, entityID)
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +121,7 @@ func (c *Winlog) Process(e datamodels.Map) (Entries, error) {
 			if !ok {
 				return nil
 			}
-			id, err := ne.CommunityID(c.CommunityID)
+			id, err := ne.communityID(c.CommunityID)
 			if err != nil {
 				return err
 			}
@@ -156,7 +156,7 @@ func (c *Winlog) Process(e datamodels.Map) (Entries, error) {
 		if !found && c.storeNetEvents {
 			c.Stats.NetEventsStored++
 			err := c.buckets.network.InsertCurrent(func(b *Bucket) error {
-				data, ok := b.Data.(NetworkEvents)
+				data, ok := b.Data.(networkEvents)
 				if !ok {
 					return errors.New("invalid bucket data type")
 				}
@@ -182,7 +182,7 @@ func (c *Winlog) Process(e datamodels.Map) (Entries, error) {
 		if c.storeNetEvents {
 			// now we should also do a lookup to see if any network events came before the command
 			err := c.buckets.network.Check(func(b *Bucket) error {
-				data, ok := b.Data.(NetworkEvents)
+				data, ok := b.Data.(networkEvents)
 				if !ok {
 					return errors.New("invalid bucket data type")
 				}
@@ -191,7 +191,7 @@ func (c *Winlog) Process(e datamodels.Map) (Entries, error) {
 				}
 				for _, ne := range data {
 					if ne.GUID == entityID {
-						id, err := ne.CommunityID(c.CommunityID)
+						id, err := ne.communityID(c.CommunityID)
 						if err != nil {
 							return err
 						}
@@ -255,7 +255,7 @@ func NewWinlog(c WinlogConfig) (*Winlog, error) {
 	}
 	network, err := newBuckets(bucketsConfig{
 		BucketsConfig:       c.Buckets.Network,
-		ContainerCreateFunc: func() any { return make(NetworkEvents, 0) },
+		ContainerCreateFunc: func() any { return make(networkEvents, 0) },
 	})
 	if err != nil {
 		return nil, err
