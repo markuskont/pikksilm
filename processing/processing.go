@@ -1,16 +1,12 @@
-package enrich
-
-import (
-	"github.com/markuskont/pikksilm/pkg/models"
-)
+package processing
 
 type Enrichment struct {
 	Key   string
-	Entry models.Entry
+	Entry Entry
 }
 
 type Processor interface {
-	Process(models.Entry) (Entries, error)
+	Process(Entry) (Entries, error)
 }
 
 type EntriesCheker interface {

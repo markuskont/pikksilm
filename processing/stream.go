@@ -1,4 +1,4 @@
-package stream
+package processing
 
 import (
 	"bufio"
@@ -9,15 +9,13 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/markuskont/pikksilm/pkg/enrich"
-	"github.com/markuskont/pikksilm/pkg/models"
 	"github.com/sirupsen/logrus"
 )
 
 func ReadWinlogStdin(
 	ctx context.Context,
 	log *logrus.Logger,
-	w *enrich.Winlog,
+	w *Winlog,
 ) error {
 	scanner := bufio.NewScanner(os.Stdin)
 	tick := time.NewTicker(10 * time.Second)
@@ -32,8 +30,8 @@ loop:
 				WithFields(w.Stats.Fields()).
 				Info("EDR report")
 		default:
-			var e models.Entry
-			if err := models.Decoder.Unmarshal(scanner.Bytes(), &e); err != nil {
+			var e Entry
+			if err := Decoder.Unmarshal(scanner.Bytes(), &e); err != nil {
 				log.Error(err)
 				continue loop
 			}
@@ -49,8 +47,8 @@ loop:
 func ReadWinlogRedis(
 	ctx context.Context,
 	log *logrus.Logger,
-	w *enrich.Winlog,
-	c models.ConfigRedisInstance,
+	w *Winlog,
+	c ConfigRedisInstance,
 ) error {
 	if c.Batch == 0 {
 		return errors.New("winlog redis batch size not configured")
@@ -98,7 +96,7 @@ outer:
 
 func RedisBatchProcess(
 	pipeline redis.Pipeliner,
-	p enrich.Processor,
+	p Processor,
 	src, dest string,
 	batch int64,
 	log *logrus.Logger,
@@ -118,8 +116,8 @@ func RedisBatchProcess(
 	}
 loop:
 	for _, item := range result {
-		var e models.Entry
-		if err := models.Decoder.Unmarshal([]byte(item), &e); err != nil {
+		var e Entry
+		if err := Decoder.Unmarshal([]byte(item), &e); err != nil {
 			log.Error(err)
 			continue loop
 		}
@@ -138,12 +136,12 @@ loop:
 	return err
 }
 
-func RedisPushEntries(pipeline redis.Pipeliner, b enrich.Entries, key string) error {
+func RedisPushEntries(pipeline redis.Pipeliner, b Entries, key string) error {
 	if len(b) == 0 {
 		return nil
 	}
 	for _, item := range b {
-		encoded, err := models.Decoder.Marshal(item)
+		encoded, err := Decoder.Marshal(item)
 		if err != nil {
 			return err
 		}

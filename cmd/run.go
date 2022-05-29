@@ -12,9 +12,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/markuskont/pikksilm/pkg/enrich"
-	"github.com/markuskont/pikksilm/pkg/models"
-	"github.com/markuskont/pikksilm/pkg/stream"
+	"github.com/markuskont/pikksilm/processing"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -33,7 +31,7 @@ var runCmd = &cobra.Command{
 		defer func() {
 			log.Info("good exit")
 		}()
-		ch := make(chan enrich.Enrichment, 1000)
+		ch := make(chan processing.Enrichment, 1000)
 		ctx, stop := context.WithCancel(context.Background())
 
 		pool, poolCtx := errgroup.WithContext(ctx)
@@ -48,13 +46,13 @@ var runCmd = &cobra.Command{
 		// worker to handle winlogbeat correlation
 		pool.Go(func() error {
 			defer close(ch)
-			c, err := enrich.NewWinlog(enrich.WinlogConfig{
-				Buckets: enrich.WinlogBucketsConfig{
-					Command: enrich.BucketsConfig{
+			c, err := processing.NewWinlog(processing.WinlogConfig{
+				Buckets: processing.WinlogBucketsConfig{
+					Command: processing.BucketsConfig{
 						Count: viper.GetInt("run.buckets.cmd.count"),
 						Size:  viper.GetDuration("run.buckets.cmd.size"),
 					},
-					Network: enrich.BucketsConfig{
+					Network: processing.BucketsConfig{
 						Count: viper.GetInt("run.buckets.net.count"),
 						Size:  viper.GetDuration("run.buckets.net.size"),
 					},
@@ -73,7 +71,7 @@ var runCmd = &cobra.Command{
 
 			switch viper.GetString("run.stream.edr.input") {
 			case "redis":
-				if err := stream.ReadWinlogRedis(poolCtx, log, c, models.ConfigRedisInstance{
+				if err := processing.ReadWinlogRedis(poolCtx, log, c, processing.ConfigRedisInstance{
 					Host:     viper.GetString("run.stream.edr.redis.host"),
 					Password: viper.GetString("run.stream.edr.redis.password"),
 					Database: viper.GetInt("run.stream.edr.redis.db"),
@@ -83,7 +81,7 @@ var runCmd = &cobra.Command{
 					return err
 				}
 			case "stdin":
-				if err := stream.ReadWinlogStdin(poolCtx, log, c); err != nil {
+				if err := processing.ReadWinlogStdin(poolCtx, log, c); err != nil {
 					return err
 				}
 			default:
@@ -92,13 +90,13 @@ var runCmd = &cobra.Command{
 			return c.Close()
 		})
 		var (
-			wiseCh chan enrich.Enrichment
-			suriCh chan enrich.Enrichment
+			wiseCh chan processing.Enrichment
+			suriCh chan processing.Enrichment
 		)
 		if viper.GetBool("run.stream.ndr.enabled") {
 			log.Info("NDR enrichment enabled")
-			wiseCh = make(chan enrich.Enrichment, 100)
-			suriCh = make(chan enrich.Enrichment, 100)
+			wiseCh = make(chan processing.Enrichment, 100)
+			suriCh = make(chan processing.Enrichment, 100)
 			// worker to split enrichmetns between WISE and Suricata
 			pool.Go(func() error {
 				defer close(wiseCh)
@@ -121,7 +119,7 @@ var runCmd = &cobra.Command{
 					"db":   c.DB,
 				}).Debug("NDR connecting to redis")
 				rdb := redis.NewClient(c)
-				stream.CheckRedisConn(poolCtx, rdb, log, c.Addr, "ndr")
+				processing.CheckRedisConn(poolCtx, rdb, log, c.Addr, "ndr")
 				log.Info("ndr redis handler started")
 				pipeline := rdb.Pipeline()
 				defer pipeline.Close()
@@ -143,12 +141,12 @@ var runCmd = &cobra.Command{
 						log.Warn("NDR enrichment logging enabled but dump folder not configured.")
 					}
 				}
-				cc := enrich.BucketsConfig{
+				cc := processing.BucketsConfig{
 					Size:  viper.GetDuration("run.buckets.ndr.enrichments.size"),
 					Count: viper.GetInt("run.buckets.ndr.enrichments.count"),
 				}
-				sessions, err := enrich.NewSuricata(
-					enrich.SuricataConfig{
+				sessions, err := processing.NewSuricata(
+					processing.SuricataConfig{
 						EnrichedJSONPath: logSessions,
 						CommandBuckets:   cc,
 						Mu:               &mu,
@@ -158,8 +156,8 @@ var runCmd = &cobra.Command{
 					return err
 				}
 				defer sessions.Close()
-				alerts, err := enrich.NewSuricata(
-					enrich.SuricataConfig{
+				alerts, err := processing.NewSuricata(
+					processing.SuricataConfig{
 						EnrichedJSONPath: logAlerts,
 						CommandBuckets:   cc,
 						Mu:               &mu,
@@ -194,8 +192,8 @@ var runCmd = &cobra.Command{
 						if !ok {
 							break loop
 						}
-						sessions.Commands.InsertCurrent(func(b *enrich.Bucket) error {
-							data, ok := b.Data.(enrich.CommandEvents)
+						sessions.Commands.InsertCurrent(func(b *processing.Bucket) error {
+							data, ok := b.Data.(processing.CommandEvents)
 							if !ok {
 								return errors.New("suricata handler cmd event insert wrong type")
 							}
@@ -204,14 +202,14 @@ var runCmd = &cobra.Command{
 						})
 						countEnrichPickups++
 					default:
-						if err := stream.RedisBatchProcess(pipeline, sessions,
+						if err := processing.RedisBatchProcess(pipeline, sessions,
 							viper.GetString("run.stream.ndr.redis.queue.input.sessions"),
 							viper.GetString("run.stream.ndr.redis.queue.output.sessions"),
 							10, log); err != nil {
 							log.Error(err)
 							time.Sleep(1 * time.Second)
 						}
-						if err := stream.RedisBatchProcess(pipeline, alerts,
+						if err := processing.RedisBatchProcess(pipeline, alerts,
 							viper.GetString("run.stream.ndr.redis.queue.input.alerts"),
 							viper.GetString("run.stream.ndr.redis.queue.output.alerts"),
 							10, log); err != nil {
@@ -235,12 +233,12 @@ var runCmd = &cobra.Command{
 				DB:       viper.GetInt("run.stream.wise.redis.db"),
 			}
 			rdb := redis.NewClient(c)
-			stream.CheckRedisConn(poolCtx, rdb, log, c.Addr, "wise")
+			processing.CheckRedisConn(poolCtx, rdb, log, c.Addr, "wise")
 			log.Info("wise redis handler started")
 		loop:
 			for item := range wiseCh {
 				mu.Lock()
-				encoded, err := models.Decoder.Marshal(item.Entry)
+				encoded, err := processing.Decoder.Marshal(item.Entry)
 				if err != nil {
 					log.Error(err)
 					continue loop

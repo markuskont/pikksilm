@@ -1,6 +1,8 @@
-package models
+package processing
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type ErrInvalidEvent struct {
 	Key string

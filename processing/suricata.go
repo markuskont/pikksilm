@@ -1,4 +1,4 @@
-package enrich
+package processing
 
 import (
 	"encoding/json"
@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/markuskont/pikksilm/pkg/models"
 	"github.com/sirupsen/logrus"
 )
 
@@ -58,7 +57,7 @@ func (s *Suricata) checkEntries(e Entries) error {
 	})
 }
 
-func (s *Suricata) Process(e models.Entry) (Entries, error) {
+func (s *Suricata) Process(e Entry) (Entries, error) {
 	s.Stats.Total++
 	b, err := s.EVE.InsertCurrentAndGetVal(func(b *Bucket) error {
 		data, ok := b.Data.(Entries)
@@ -80,7 +79,7 @@ func (s Suricata) CheckRelease() Entries {
 	return e
 }
 
-func (s Suricata) writeEnrichedEntry(e models.Entry) error {
+func (s Suricata) writeEnrichedEntry(e Entry) error {
 	if writer := s.enrichmentWriter; writer != nil {
 		encoded, err := json.Marshal(e)
 		if err != nil {

@@ -1,4 +1,4 @@
-package models
+package processing
 
 import (
 	"testing"

@@ -1,4 +1,4 @@
-package enrich
+package processing
 
 import (
 	"compress/gzip"
@@ -7,16 +7,14 @@ import (
 	"fmt"
 	"os"
 	"time"
-
-	"github.com/markuskont/pikksilm/pkg/models"
 )
 
 type BucketHandlerFunc func(*Bucket) error
 type ContainerCreateFunc func() any
 
-type Entries []models.Entry
-type NetworkEvents []models.NetworkEntry
-type CommandEvents map[string]models.Entry
+type Entries []Entry
+type NetworkEvents []NetworkEntry
+type CommandEvents map[string]Entry
 
 func newEntries() any { return make(Entries, 0) }
 
@@ -167,7 +165,7 @@ func castConcreteCmdEvents(buckets []Bucket) {
 		if cmd, ok := val.Data.(map[string]any); ok {
 			for k, v := range cmd {
 				if entry, ok := v.(map[string]any); ok {
-					concrete[k] = models.Entry(entry)
+					concrete[k] = Entry(entry)
 				}
 			}
 		}

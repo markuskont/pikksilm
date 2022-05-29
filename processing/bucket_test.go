@@ -1,11 +1,10 @@
-package enrich
+package processing
 
 import (
 	"net"
 	"testing"
 	"time"
 
-	"github.com/markuskont/pikksilm/pkg/models"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -49,10 +48,10 @@ func TestInsertCurrent(t *testing.T) {
 	b.InsertCurrent(func(b *Bucket) error {
 		data, ok := b.Data.(NetworkEvents)
 		assert.True(t, ok)
-		data = append(data, models.NetworkEntry{
+		data = append(data, NetworkEntry{
 			SrcIP: net.ParseIP("1.2.3.4"),
 		})
-		data = append(data, models.NetworkEntry{
+		data = append(data, NetworkEntry{
 			SrcIP: net.ParseIP("5.6.7.8"),
 		})
 		b.Data = data
@@ -105,7 +104,7 @@ func TestBucketExpand(t *testing.T) {
 		return nil
 	}, ts.Add(18*time.Second))
 	assert.Nil(t, err)
-	val4expandded := append(val4, models.NetworkEntry{SrcIP: net.IPv4(1, 1, 4, 2)})
+	val4expandded := append(val4, NetworkEntry{SrcIP: net.IPv4(1, 1, 4, 2)})
 	_, err = buckets.insert(func(b *Bucket) error {
 		b.Data = val4expandded
 		return nil

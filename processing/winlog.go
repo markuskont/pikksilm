@@ -1,11 +1,10 @@
-package enrich
+package processing
 
 import (
 	"errors"
 	"path"
 	"sync"
 
-	"github.com/markuskont/pikksilm/pkg/models"
 	"github.com/satta/gommunityid"
 )
 
@@ -86,7 +85,7 @@ func (c *Winlog) Enrichments() <-chan Enrichment {
 
 func (c Winlog) CmdLen() int { return len(c.buckets.commands.Buckets) }
 
-func (c *Winlog) Process(e models.Entry) (Entries, error) {
+func (c *Winlog) Process(e Entry) (Entries, error) {
 	entityID, ok := e.GetString("process", "entity_id")
 	if !ok {
 		c.Stats.MissingGUID++
@@ -95,7 +94,7 @@ func (c *Winlog) Process(e models.Entry) (Entries, error) {
 	eventID, ok := e.GetString("winlog", "event_id")
 	if !ok {
 		c.Stats.MissingEventID++
-		return nil, models.ErrInvalidEvent{
+		return nil, ErrInvalidEvent{
 			Key: "winlog.event_id",
 			Raw: e,
 		}
@@ -105,7 +104,7 @@ func (c *Winlog) Process(e models.Entry) (Entries, error) {
 	case "3":
 		c.Stats.CountNetwork++
 		// network event
-		ne, err := models.ExtractNetworkEntryECS(e, entityID)
+		ne, err := ExtractNetworkEntryECS(e, entityID)
 		if err != nil {
 			return nil, err
 		}
@@ -212,7 +211,7 @@ func (c *Winlog) Process(e models.Entry) (Entries, error) {
 	return nil, nil
 }
 
-func (c *Winlog) send(e models.Entry, key string) {
+func (c *Winlog) send(e Entry, key string) {
 	c.Stats.Enriched++
 	c.enrichments <- Enrichment{Entry: e, Key: key}
 }
