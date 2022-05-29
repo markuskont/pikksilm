@@ -1,0 +1,18 @@
+---
+winlogbeat.event_logs:
+  - name: Microsoft-Windows-Sysmon/Operational
+    processors:
+      - script:
+          lang: javascript
+          id: sysmon
+          file: "c:/winlogbeat/module/sysmon/config/winlogbeat-sysmon.js"
+
+output.redis:
+  hosts: ["server:6379"]
+  key: "winlogbeat"
+  db: 0
+  timeout: 5
+
+processors:
+  - add_host_metadata: ~
+  - add_cloud_metadata: ~
