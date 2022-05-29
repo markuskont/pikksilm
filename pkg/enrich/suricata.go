@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"os"
 	"sync"
 	"time"
@@ -17,8 +16,6 @@ type SuricataStats struct {
 	Total              int
 	MissingCommunityID int
 	Enriched           int
-	AssetSrc           int
-	AssetDest          int
 }
 
 type Suricata struct {
@@ -28,8 +25,6 @@ type Suricata struct {
 	EVE *Buckets
 
 	Stats SuricataStats
-
-	Assets *Assets
 
 	enrichmentWriter io.WriteCloser
 	log              *logrus.Logger
@@ -63,26 +58,8 @@ func (s *Suricata) checkEntries(e Entries) error {
 	})
 }
 
-func (s Suricata) checkAsset(e models.Entry, key string) int {
-	if rawIP, ok := e.GetString(key); ok {
-		if addr := net.ParseIP(rawIP); addr != nil {
-			if a, is := s.Assets.Values[addr.String()]; is {
-				s.mu.Lock()
-				e.Set(a, "asset", key)
-				s.mu.Unlock()
-				return 1
-			}
-		}
-	}
-	return 0
-}
-
 func (s *Suricata) Process(e models.Entry) (Entries, error) {
 	s.Stats.Total++
-	if s.Assets != nil {
-		s.Stats.AssetSrc += s.checkAsset(e, "src_ip")
-		s.Stats.AssetDest += s.checkAsset(e, "dest_ip")
-	}
 	b, err := s.EVE.InsertCurrentAndGetVal(func(b *Bucket) error {
 		data, ok := b.Data.(Entries)
 		if !ok {
