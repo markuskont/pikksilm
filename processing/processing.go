@@ -1,12 +1,14 @@
 package processing
 
+import "github.com/markuskont/datamodels"
+
 type Enrichment struct {
 	Key   string
-	Entry Entry
+	Entry datamodels.Map
 }
 
 type Processor interface {
-	Process(Entry) (Entries, error)
+	Process(datamodels.Map) (Entries, error)
 }
 
 type EntriesCheker interface {

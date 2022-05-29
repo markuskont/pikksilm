@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/markuskont/datamodels"
 	"github.com/sirupsen/logrus"
 )
 
@@ -57,7 +58,7 @@ func (s *Suricata) checkEntries(e Entries) error {
 	})
 }
 
-func (s *Suricata) Process(e Entry) (Entries, error) {
+func (s *Suricata) Process(e datamodels.Map) (Entries, error) {
 	s.Stats.Total++
 	b, err := s.EVE.InsertCurrentAndGetVal(func(b *Bucket) error {
 		data, ok := b.Data.(Entries)
@@ -79,7 +80,7 @@ func (s Suricata) CheckRelease() Entries {
 	return e
 }
 
-func (s Suricata) writeEnrichedEntry(e Entry) error {
+func (s Suricata) writeEnrichedEntry(e datamodels.Map) error {
 	if writer := s.enrichmentWriter; writer != nil {
 		encoded, err := json.Marshal(e)
 		if err != nil {

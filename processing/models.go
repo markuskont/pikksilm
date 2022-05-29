@@ -5,114 +5,15 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"time"
 
 	jsoniter "github.com/json-iterator/go"
+	"github.com/markuskont/datamodels"
 	"github.com/satta/gommunityid"
 )
 
 var Decoder = jsoniter.ConfigCompatibleWithStandardLibrary
 
 const ArgTimeFormat = "2006-01-02 15:04:05"
-
-// Entry is a nested map with helper methods for recursive lookups
-type Entry map[string]any
-
-func (d Entry) Set(value any, key ...string) error {
-	if len(key) == 0 {
-		return nil
-	}
-	if len(key) == 1 {
-		d[key[0]] = value
-	} else {
-		val, ok := d[key[0]]
-		if ok {
-			switch res := val.(type) {
-			case map[string]any:
-				// recurse into existing map
-				return Entry(res).Set(value, key[1:]...)
-			case Entry:
-				// recurse into existing map
-				return res.Set(value, key[1:]...)
-			default:
-				e := Entry{}
-				d[key[0]] = e
-				return e.Set(value, key[1:]...)
-			}
-		}
-		e := Entry{}
-		d[key[0]] = e
-		return e.Set(value, key[1:]...)
-	}
-	return nil
-}
-
-// Get is a helper for doing recursive lookups into nested maps (nested JSON). Key argument is a
-// slice of strings
-func (d Entry) Get(key ...string) (any, bool) {
-	if len(key) == 0 {
-		return nil, false
-	}
-	if val, ok := d[key[0]]; ok {
-		switch res := val.(type) {
-		case Entry:
-			// key has only one item, user wants the map itselt, not subelement
-			if len(key) == 1 {
-				return res, ok
-			}
-			// recurse with key remainder
-			return res.Get(key[1:]...)
-		case map[string]any:
-			// key has only one item, user wants the map itselt, not subelement
-			if len(key) == 1 {
-				return res, ok
-			}
-			// recurse with key remainder
-			return Entry(res).Get(key[1:]...)
-		default:
-			return val, ok
-		}
-	}
-	return nil, false
-}
-
-// GetString wraps Get to cast item to string.
-func (d Entry) GetString(key ...string) (string, bool) {
-	val, ok := d.Get(key...)
-	if !ok {
-		return "", false
-	}
-	str, ok := val.(string)
-	if !ok {
-		return "", false
-	}
-	return str, true
-}
-
-func (d Entry) GetTimestamp(key ...string) (time.Time, bool, error) {
-	val, ok := d.GetString(key...)
-	if !ok {
-		return time.Time{}, false, nil
-	}
-	ts, err := time.Parse(time.RFC3339, val)
-	if err != nil {
-		return time.Time{}, false, err
-	}
-	return ts, true, nil
-}
-
-// GetNumber retrieves JSON numeric value which are by spec floating points
-func (d Entry) GetNumber(key ...string) (float64, bool) {
-	val, ok := d.Get(key...)
-	if !ok {
-		return -1, false
-	}
-	n, ok := val.(float64)
-	if !ok {
-		return -1, false
-	}
-	return n, true
-}
 
 // NetworkEntry is simplified event_id 3 entry that can be kept in memory with lower overhead.
 // It is used to generate community ID
@@ -140,7 +41,7 @@ func (n NetworkEntry) CommunityID(cid gommunityid.CommunityID) (string, error) {
 	return cid.CalcBase64(ft), nil
 }
 
-func ExtractNetworkEntryBase(e Entry, guid string) (*NetworkEntry, error) {
+func ExtractNetworkEntryBase(e datamodels.Map, guid string) (*NetworkEntry, error) {
 	proto, ok := e.GetString("winlog", "event_data", "Protocol")
 	if !ok {
 		return nil, errors.New("missing transport")
@@ -202,7 +103,7 @@ func ExtractNetworkEntryBase(e Entry, guid string) (*NetworkEntry, error) {
 	}, nil
 }
 
-func ExtractNetworkEntryECS(e Entry, guid string) (*NetworkEntry, error) {
+func ExtractNetworkEntryECS(e datamodels.Map, guid string) (*NetworkEntry, error) {
 	proto, ok := e.GetString("network", "transport")
 	if !ok {
 		return nil, errors.New("missing transport")

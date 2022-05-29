@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/markuskont/datamodels"
 	"github.com/sirupsen/logrus"
 )
 
@@ -30,7 +31,7 @@ loop:
 				WithFields(w.Stats.Fields()).
 				Info("EDR report")
 		default:
-			var e Entry
+			var e datamodels.Map
 			if err := Decoder.Unmarshal(scanner.Bytes(), &e); err != nil {
 				log.Error(err)
 				continue loop
@@ -116,7 +117,7 @@ func RedisBatchProcess(
 	}
 loop:
 	for _, item := range result {
-		var e Entry
+		var e datamodels.Map
 		if err := Decoder.Unmarshal([]byte(item), &e); err != nil {
 			log.Error(err)
 			continue loop

@@ -7,14 +7,16 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/markuskont/datamodels"
 )
 
 type BucketHandlerFunc func(*Bucket) error
 type ContainerCreateFunc func() any
 
-type Entries []Entry
+type Entries []datamodels.Map
 type NetworkEvents []NetworkEntry
-type CommandEvents map[string]Entry
+type CommandEvents map[string]datamodels.Map
 
 func newEntries() any { return make(Entries, 0) }
 
@@ -165,7 +167,7 @@ func castConcreteCmdEvents(buckets []Bucket) {
 		if cmd, ok := val.Data.(map[string]any); ok {
 			for k, v := range cmd {
 				if entry, ok := v.(map[string]any); ok {
-					concrete[k] = Entry(entry)
+					concrete[k] = datamodels.Map(entry)
 				}
 			}
 		}

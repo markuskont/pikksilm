@@ -5,6 +5,7 @@ import (
 	"path"
 	"sync"
 
+	"github.com/markuskont/datamodels"
 	"github.com/satta/gommunityid"
 )
 
@@ -85,7 +86,7 @@ func (c *Winlog) Enrichments() <-chan Enrichment {
 
 func (c Winlog) CmdLen() int { return len(c.buckets.commands.Buckets) }
 
-func (c *Winlog) Process(e Entry) (Entries, error) {
+func (c *Winlog) Process(e datamodels.Map) (Entries, error) {
 	entityID, ok := e.GetString("process", "entity_id")
 	if !ok {
 		c.Stats.MissingGUID++
@@ -211,7 +212,7 @@ func (c *Winlog) Process(e Entry) (Entries, error) {
 	return nil, nil
 }
 
-func (c *Winlog) send(e Entry, key string) {
+func (c *Winlog) send(e datamodels.Map, key string) {
 	c.Stats.Enriched++
 	c.enrichments <- Enrichment{Entry: e, Key: key}
 }

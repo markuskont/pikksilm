@@ -2,11 +2,13 @@ package processing
 
 import (
 	"fmt"
+
+	"github.com/markuskont/datamodels"
 )
 
 type ErrInvalidEvent struct {
 	Key string
-	Raw Entry
+	Raw datamodels.Map
 }
 
 func (e ErrInvalidEvent) Error() string {
