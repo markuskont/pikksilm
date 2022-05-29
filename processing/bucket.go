@@ -2,7 +2,6 @@ package processing
 
 import (
 	"compress/gzip"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"

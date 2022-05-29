@@ -1,6 +1,11 @@
 package processing
 
-import "github.com/markuskont/datamodels"
+import (
+	jsoniter "github.com/json-iterator/go"
+	"github.com/markuskont/datamodels"
+)
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 type Enrichment struct {
 	Key   string

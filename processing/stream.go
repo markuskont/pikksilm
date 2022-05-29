@@ -32,7 +32,7 @@ loop:
 				Info("EDR report")
 		default:
 			var e datamodels.Map
-			if err := Decoder.Unmarshal(scanner.Bytes(), &e); err != nil {
+			if err := json.Unmarshal(scanner.Bytes(), &e); err != nil {
 				log.Error(err)
 				continue loop
 			}
@@ -118,7 +118,7 @@ func RedisBatchProcess(
 loop:
 	for _, item := range result {
 		var e datamodels.Map
-		if err := Decoder.Unmarshal([]byte(item), &e); err != nil {
+		if err := json.Unmarshal([]byte(item), &e); err != nil {
 			log.Error(err)
 			continue loop
 		}
@@ -142,7 +142,7 @@ func RedisPushEntries(pipeline redis.Pipeliner, b Entries, key string) error {
 		return nil
 	}
 	for _, item := range b {
-		encoded, err := Decoder.Marshal(item)
+		encoded, err := json.Marshal(item)
 		if err != nil {
 			return err
 		}

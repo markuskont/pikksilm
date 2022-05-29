@@ -12,12 +12,15 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/markuskont/pikksilm/processing"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"golang.org/x/sync/errgroup"
 )
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 // runCmd represents the run command
 var runCmd = &cobra.Command{
@@ -238,7 +241,7 @@ var runCmd = &cobra.Command{
 		loop:
 			for item := range wiseCh {
 				mu.Lock()
-				encoded, err := processing.Decoder.Marshal(item.Entry)
+				encoded, err := json.Marshal(item.Entry)
 				if err != nil {
 					log.Error(err)
 					continue loop
