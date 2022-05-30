@@ -1,185 +1,208 @@
 package processing
 
 import (
-	"bufio"
 	"context"
 	"errors"
-	"fmt"
-	"os"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/markuskont/datamodels"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 )
 
-func ReadWinlogStdin(
-	ctx context.Context,
-	log *logrus.Logger,
-	w *Winlog,
-) error {
-	scanner := bufio.NewScanner(os.Stdin)
-	tick := time.NewTicker(10 * time.Second)
-	defer tick.Stop()
-loop:
-	for scanner.Scan() {
-		select {
-		case <-ctx.Done():
-			break loop
-		case <-tick.C:
-			log.
-				WithFields(w.Stats.fields()).
-				Info("EDR report")
-		default:
-			var e datamodels.Map
-			if err := json.Unmarshal(scanner.Bytes(), &e); err != nil {
-				log.Error(err)
-				continue loop
-			}
-			_, err := w.Process(e)
-			if err != nil {
-				log.Error(err)
-			}
-		}
-	}
-	return scanner.Err()
+type MapHandlerFunc func(datamodels.Map)
+
+type DataMapShards struct {
+	Channels []chan datamodels.Map
+	Ctx      context.Context
+	Len      uint64
 }
 
-func ReadWinlogRedis(
-	ctx context.Context,
-	log *logrus.Logger,
-	w *Winlog,
-	c ConfigRedisInstance,
-) error {
-	if c.Batch == 0 {
-		return errors.New("winlog redis batch size not configured")
-	}
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     c.Host,
-		DB:       c.Database,
-		Password: c.Password,
-	})
-	if !CheckRedisConn(ctx, rdb, log, c.Host, "winlog") {
-		return nil
-	}
-	log.Info("winlog redis handler started")
-	pipeline := rdb.Pipeline()
-	defer pipeline.Close()
-
-	tick := time.NewTicker(10 * time.Second)
-	defer tick.Stop()
-
-	tickPersist := time.NewTicker(30 * time.Second)
-	defer tickPersist.Stop()
-
-outer:
-	for {
-		select {
-		case <-tick.C:
-			log.
-				WithFields(w.Stats.fields()).
-				Info("EDR report")
-		case <-tickPersist.C:
-			if err := w.persist(); err != nil {
-				log.Error(err)
-			}
-		case <-ctx.Done():
-			break outer
-		default:
-			if err := RedisBatchProcess(pipeline, w, c.Key, "", c.Batch, log); err != nil {
-				log.Error(err)
-				time.Sleep(1 * time.Second)
+func (s *DataMapShards) Handler() MapHandlerFunc {
+	return func(m datamodels.Map) {
+		entityID, ok := m.GetString("process", "entity_id")
+		if ok {
+			select {
+			case s.Channels[balanceString(entityID, s.Len)] <- m:
+			case <-s.Ctx.Done():
+				return
 			}
 		}
+	}
+}
+
+func NewDataMapShards(ctx context.Context, workers int) (*DataMapShards, error) {
+	if workers < 1 {
+		return nil, errors.New("invalid worker count for shard init")
+	}
+	shards := make([]chan datamodels.Map, workers)
+	for i := range shards {
+		ch := make(chan datamodels.Map)
+		shards[i] = ch
+	}
+	return &DataMapShards{
+		Ctx:      ctx,
+		Channels: shards,
+		Len:      uint64(len(shards)),
+	}, nil
+}
+
+func (s *DataMapShards) Close() error {
+	for i := range s.Channels {
+		close(s.Channels[i])
 	}
 	return nil
 }
 
-func RedisBatchProcess(
-	pipeline redis.Pipeliner,
-	p Processor,
-	src, dest string,
-	batch int64,
-	log *logrus.Logger,
-) error {
-	data := pipeline.LRange(context.TODO(), src, 0, batch)
-	pipeline.LTrim(context.TODO(), src, batch, -1)
-	_, err := pipeline.Exec(context.TODO())
-	if err != nil {
-		return err
+type SysmonConsumeConfig struct {
+	Client  *redis.Client
+	Key     string
+	Workers int
+	Pool    *errgroup.Group
+	Ctx     context.Context
+	Logger  *logrus.Logger
+	Handler MapHandlerFunc
+}
+
+func ConsumeSysmonEvents(c SysmonConsumeConfig) error {
+	if c.Client == nil {
+		return errors.New("sysmon redis client missing")
 	}
-	result, err := data.Result()
-	if err != nil {
-		return err
+	if c.Key == "" {
+		return errors.New("sysmon redis key missing")
 	}
-	if len(result) == 0 {
-		time.Sleep(100 * time.Microsecond)
+	if c.Workers < 1 {
+		return errors.New("invalid sysmon consumer count")
 	}
-loop:
-	for _, item := range result {
-		var e datamodels.Map
-		if err := json.Unmarshal([]byte(item), &e); err != nil {
-			log.Error(err)
-			continue loop
-		}
-		bulk, err := p.Process(e)
-		if err != nil {
-			log.Error(err)
-			continue loop
-		}
-		if bulk != nil && dest != "" {
-			if err := redisPushEntries(pipeline, bulk, dest); err != nil {
-				log.Error(err)
-				continue loop
+	if c.Pool == nil {
+		return errors.New("missing worker pool")
+	}
+	if c.Ctx == nil {
+		return errors.New("missing context")
+	}
+	if c.Logger == nil {
+		return errors.New("missing logger")
+	}
+	if c.Handler == nil {
+		return errors.New("missing data map handler")
+	}
+	// wait until redis is up
+	if err := c.Client.Ping(context.TODO()).Err(); err != nil {
+		c.Logger.WithField("err", err).Logger.Error("could not contact redis, will retry")
+	loop:
+		for {
+			select {
+			case <-c.Ctx.Done():
+				return errors.New("could not contact redis")
+			default:
+				time.Sleep(1 * time.Second)
+				if err := c.Client.Ping(context.TODO()).Err(); err == nil {
+					break loop
+				}
 			}
 		}
 	}
-	return err
+	c.Logger.Info("redis connection established")
+
+	var wg sync.WaitGroup
+	for i := 0; i < c.Workers; i++ {
+		wg.Add(1)
+		worker := i
+
+		c.Pool.Go(func() error {
+			defer wg.Done()
+			lctx := c.Logger.
+				WithField("count", worker).
+				WithField("task", "consume")
+
+			lctx.Info("worker setting up")
+		loop:
+			for {
+				select {
+				case <-c.Ctx.Done():
+					lctx.Info("caught exit")
+					break loop
+				default:
+					raw, err := c.Client.LPop(context.TODO(), c.Key).Bytes()
+					if err != nil {
+						if err == redis.Nil {
+							time.Sleep(50 * time.Microsecond)
+						} else {
+							lctx.Error(err)
+						}
+						continue loop
+					}
+					var e datamodels.Map
+					if err := json.Unmarshal(raw, &e); err != nil {
+						lctx.Error(err)
+						continue loop
+					}
+					c.Handler(e)
+				}
+			}
+			return nil
+		})
+	}
+	return nil
 }
 
-func redisPushEntries(pipeline redis.Pipeliner, b entries, key string) error {
-	if len(b) == 0 {
-		return nil
-	}
-	for _, item := range b {
-		encoded, err := json.Marshal(item)
-		if err != nil {
-			return err
-		}
-		pipeline.RPush(context.Background(), key, encoded)
-	}
-	_, err := pipeline.Exec(context.Background())
-	return err
+type SysmonCorrelateConfig struct {
+	Workers int
+	Pool    *errgroup.Group
+	Ctx     context.Context
+	Logger  *logrus.Logger
+	Shards  *DataMapShards
 }
 
-func CheckRedisConn(
-	ctx context.Context,
-	rdb *redis.Client,
-	log *logrus.Logger,
-	addr string,
-	name string,
-) bool {
-validate:
-	for {
-		select {
-		case <-ctx.Done():
-			return false
-		default:
-		}
-		var err error
-		if resp := rdb.Ping(context.TODO()); resp == nil {
-			err = fmt.Errorf("Unable to ping redis at %s", addr)
-		} else {
-			err = resp.Err()
-		}
-		if err != nil {
-			log.
-				WithField("task", name).
-				Error(err)
-			time.Sleep(5 * time.Second)
-		} else {
-			break validate
-		}
+func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
+	if c.Workers < 1 {
+		return errors.New("invalid worker count")
 	}
-	return true
+	if c.Pool == nil {
+		return errors.New("missing worker pool")
+	}
+	if c.Ctx == nil {
+		return errors.New("missing context")
+	}
+	if c.Logger == nil {
+		return errors.New("missing logger")
+	}
+	if c.Shards == nil {
+		return errors.New("missing shard config")
+	}
+	for i := 0; i < c.Workers; i++ {
+		worker := i
+		ch := c.Shards.Channels[worker]
+		if ch == nil {
+			return errors.New("empty shard")
+		}
+		c.Pool.Go(func() error {
+			lctx := c.Logger.
+				WithField("count", worker).
+				WithField("task", "correlate")
+			lctx.Info("worker setting up")
+		loop:
+			for {
+				select {
+				case _, ok := <-ch:
+					if !ok {
+						break loop
+					}
+				case <-c.Ctx.Done():
+					lctx.Info("caught exit")
+					break loop
+				}
+			}
+			return nil
+		})
+	}
+	return nil
 }
+
+func balanceString(value string, count uint64) int {
+	return assignWorker(hash(value), count)
+}
+
+func assignWorker(hash, workerCount uint64) int { return int(hash % workerCount) }
