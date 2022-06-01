@@ -110,7 +110,7 @@ func ConsumeSysmonEvents(c SysmonConsumeConfig) error {
 					raw, err := c.Client.LPop(context.TODO(), c.Key).Bytes()
 					if err != nil {
 						if err == redis.Nil {
-							time.Sleep(50 * time.Microsecond)
+							time.Sleep(50 * time.Millisecond)
 						} else {
 							lctx.Error(err)
 						}
