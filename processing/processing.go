@@ -2,16 +2,11 @@ package processing
 
 import (
 	jsoniter "github.com/json-iterator/go"
-	"github.com/markuskont/datamodels"
 )
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-type Enrichment struct {
+type EncodedEnrichment struct {
 	Key   string
-	Entry datamodels.Map
-}
-
-type Processor interface {
-	Process(datamodels.Map) (entries, error)
+	Entry []byte
 }

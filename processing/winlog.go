@@ -3,7 +3,6 @@ package processing
 import (
 	"errors"
 	"path"
-	"sync"
 
 	"github.com/markuskont/datamodels"
 	"github.com/satta/gommunityid"
@@ -12,7 +11,6 @@ import (
 type winlogStats struct {
 	// general statistics
 	Enriched        int
-	Sent            int
 	Dropped         int
 	NetEventsStored int
 	NetEventsPopped int
@@ -29,7 +27,6 @@ type winlogStats struct {
 func (ws winlogStats) fields() map[string]any {
 	return map[string]any{
 		"enriched":          ws.Enriched,
-		"emitted":           ws.Sent,
 		"dropped":           ws.Dropped,
 		"count":             ws.Count,
 		"count_command":     ws.CountCommand,
@@ -52,7 +49,7 @@ type Winlog struct {
 	gommunityid.CommunityID
 
 	// Enrichments map[string]models.Entry
-	enrichments chan Enrichment
+	enrichments chan EncodedEnrichment
 
 	buckets *winlogBuckets
 
@@ -61,8 +58,6 @@ type Winlog struct {
 	// weather to keep network events in buckets or not
 	// for potential out of order messages, is memory intentsive
 	storeNetEvents bool
-
-	mu *sync.RWMutex
 
 	Stats winlogStats
 }
@@ -80,22 +75,22 @@ func (c *Winlog) Close() error {
 	return c.persist()
 }
 
-func (c *Winlog) Enrichments() <-chan Enrichment {
+func (c *Winlog) Enrichments() <-chan EncodedEnrichment {
 	return c.enrichments
 }
 
 func (c Winlog) CmdLen() int { return len(c.buckets.commands.Buckets) }
 
-func (c *Winlog) Process(e datamodels.Map) (entries, error) {
+func (c *Winlog) Process(e datamodels.Map) error {
 	entityID, ok := e.GetString("process", "entity_id")
 	if !ok {
 		c.Stats.MissingGUID++
-		return nil, nil
+		return nil
 	}
 	eventID, ok := e.GetString("winlog", "event_id")
 	if !ok {
 		c.Stats.MissingEventID++
-		return nil, ErrInvalidEvent{
+		return ErrInvalidEvent{
 			Key: "winlog.event_id",
 			Raw: e,
 		}
@@ -107,7 +102,7 @@ func (c *Winlog) Process(e datamodels.Map) (entries, error) {
 		// network event
 		ne, err := extractNetworkEntryECS(e, entityID)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		// check if we already have corresponding command event cached
@@ -125,9 +120,7 @@ func (c *Winlog) Process(e datamodels.Map) (entries, error) {
 			if err != nil {
 				return err
 			}
-			c.mu.Lock()
 			command.Set(id, "network", "community_id")
-			c.mu.Unlock()
 			c.send(command, id)
 			found = true
 			// command was already found in latest bucket, no need to move it
@@ -148,7 +141,7 @@ func (c *Winlog) Process(e datamodels.Map) (entries, error) {
 				return nil
 			})
 		}); err != nil {
-			return nil, err
+			return err
 		}
 
 		// TODO - this actually seems kinda pointless, maybe ditch this code path entirely
@@ -163,7 +156,7 @@ func (c *Winlog) Process(e datamodels.Map) (entries, error) {
 				b.Data = append(data, *ne)
 				return nil
 			})
-			return nil, err
+			return err
 		}
 
 	case "1":
@@ -196,25 +189,29 @@ func (c *Winlog) Process(e datamodels.Map) (entries, error) {
 							return err
 						}
 						c.Stats.NetEventsPopped++
-						c.mu.Lock()
 						e.Set(id, "network", "community_id")
-						c.mu.Unlock()
+						// TODO - handle potential error
 						c.send(e, id)
 					}
 				}
 				return nil
 			})
-			return nil, err
+			return err
 		}
 	default:
-		return nil, nil
+		return nil
 	}
-	return nil, nil
+	return nil
 }
 
-func (c *Winlog) send(e datamodels.Map, key string) {
+func (c *Winlog) send(e datamodels.Map, key string) error {
 	c.Stats.Enriched++
-	c.enrichments <- Enrichment{Entry: e, Key: key}
+	data, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+	c.enrichments <- EncodedEnrichment{Entry: data, Key: key}
+	return nil
 }
 
 type WinlogBucketsConfig struct {
@@ -226,11 +223,13 @@ type WinlogConfig struct {
 	Buckets        WinlogBucketsConfig
 	StoreNetEvents bool
 	WorkDir        string
-	Destination    chan Enrichment
-	Mu             *sync.RWMutex
+	Destination    chan EncodedEnrichment
 }
 
 func NewWinlog(c WinlogConfig) (*Winlog, error) {
+	if c.Destination == nil {
+		return nil, errors.New("missing correlation dest chan")
+	}
 	cid, err := gommunityid.GetCommunityIDByVersion(1, 0)
 	if err != nil {
 		return nil, err
@@ -238,7 +237,6 @@ func NewWinlog(c WinlogConfig) (*Winlog, error) {
 	w := &Winlog{
 		CommunityID:    cid,
 		storeNetEvents: c.StoreNetEvents,
-		mu:             c.Mu,
 	}
 
 	if c.WorkDir != "" {
@@ -268,7 +266,7 @@ func NewWinlog(c WinlogConfig) (*Winlog, error) {
 	if c.Destination != nil {
 		w.enrichments = c.Destination
 	} else {
-		w.enrichments = make(chan Enrichment)
+		w.enrichments = make(chan EncodedEnrichment)
 	}
 	return w, nil
 }

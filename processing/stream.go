@@ -3,7 +3,6 @@ package processing
 import (
 	"context"
 	"errors"
-	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -88,33 +87,16 @@ func ConsumeSysmonEvents(c SysmonConsumeConfig) error {
 	if c.Handler == nil {
 		return errors.New("missing data map handler")
 	}
-	// wait until redis is up
-	if err := c.Client.Ping(context.TODO()).Err(); err != nil {
-		c.Logger.WithField("err", err).Logger.Error("could not contact redis, will retry")
-	loop:
-		for {
-			select {
-			case <-c.Ctx.Done():
-				return errors.New("could not contact redis")
-			default:
-				time.Sleep(1 * time.Second)
-				if err := c.Client.Ping(context.TODO()).Err(); err == nil {
-					break loop
-				}
-			}
-		}
+	if err := waitOnRedis(c.Ctx, c.Client, c.Logger); err != nil {
+		return err
 	}
-	c.Logger.Info("redis connection established")
 
-	var wg sync.WaitGroup
 	for i := 0; i < c.Workers; i++ {
-		wg.Add(1)
 		worker := i
 
 		c.Pool.Go(func() error {
-			defer wg.Done()
 			lctx := c.Logger.
-				WithField("count", worker).
+				WithField("worker", worker).
 				WithField("task", "consume")
 
 			lctx.Info("worker setting up")
@@ -154,6 +136,8 @@ type SysmonCorrelateConfig struct {
 	Ctx     context.Context
 	Logger  *logrus.Logger
 	Shards  *DataMapShards
+
+	WinlogConfig
 }
 
 func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
@@ -180,15 +164,28 @@ func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
 		}
 		c.Pool.Go(func() error {
 			lctx := c.Logger.
-				WithField("count", worker).
+				WithField("worker", worker).
 				WithField("task", "correlate")
 			lctx.Info("worker setting up")
+
+			winlog, err := NewWinlog(c.WinlogConfig)
+			if err != nil {
+				return err
+			}
+
+			report := time.NewTicker(15 * time.Second)
+			defer report.Stop()
 		loop:
 			for {
 				select {
-				case _, ok := <-ch:
+				case <-report.C:
+					lctx.WithFields(winlog.Stats.fields()).Info("stream report")
+				case entry, ok := <-ch:
 					if !ok {
 						break loop
+					}
+					if err := winlog.Process(entry); err != nil {
+						lctx.Error(err)
 					}
 				case <-c.Ctx.Done():
 					lctx.Info("caught exit")
@@ -198,6 +195,80 @@ func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
 			return nil
 		})
 	}
+	return nil
+}
+
+type WiseConfig struct {
+	Client      *redis.Client
+	Ctx         context.Context
+	Logger      *logrus.Logger
+	Pool        *errgroup.Group
+	Enrichments <-chan EncodedEnrichment
+}
+
+func OutputWISE(c WiseConfig) error {
+	if c.Client == nil {
+		return errors.New("WISE redis host missing")
+	}
+	if c.Pool == nil {
+		return errors.New("missing worker pool")
+	}
+	if c.Ctx == nil {
+		return errors.New("missing context")
+	}
+	if c.Logger == nil {
+		return errors.New("missing logger")
+	}
+	if c.Enrichments == nil {
+		return errors.New("enrichment channel missing")
+	}
+	if err := waitOnRedis(c.Ctx, c.Client, c.Logger); err != nil {
+		return err
+	}
+	c.Pool.Go(func() error {
+		lctx := c.Logger.
+			WithField("worker", "correlate").
+			WithField("task", "wise")
+		lctx.Info("worker setting up")
+	loop:
+		for {
+			select {
+			case <-c.Ctx.Done():
+				lctx.Info("caught exit")
+				break loop
+			case e, ok := <-c.Enrichments:
+				if !ok {
+					break loop
+				}
+				if err := c.Client.LPush(context.Background(), e.Key, e.Entry).Err(); err != nil {
+					lctx.Error(err)
+					continue loop
+				}
+			}
+		}
+		return nil
+	})
+	return nil
+}
+
+func waitOnRedis(ctx context.Context, client *redis.Client, logger *logrus.Logger) error {
+	// wait until redis is up
+	if err := client.Ping(context.TODO()).Err(); err != nil {
+		logger.WithField("err", err).Error("could not contact redis, will retry")
+	loop:
+		for {
+			select {
+			case <-ctx.Done():
+				return errors.New("could not contact redis")
+			default:
+				time.Sleep(1 * time.Second)
+				if err := client.Ping(context.TODO()).Err(); err == nil {
+					break loop
+				}
+			}
+		}
+	}
+	logger.Info("redis connection established")
 	return nil
 }
 

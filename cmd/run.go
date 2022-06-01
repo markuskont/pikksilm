@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/markuskont/pikksilm/processing"
@@ -23,7 +24,10 @@ func run(cmd *cobra.Command, args []string) {
 	pool.Go(func() error {
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
-		<-ch
+		select {
+		case <-ch:
+		case <-poolCtx.Done():
+		}
 		stop()
 		return nil
 	})
@@ -34,12 +38,44 @@ func run(cmd *cobra.Command, args []string) {
 	}
 	defer shards.Close()
 
+	wiseCorrelationCh := make(chan processing.EncodedEnrichment)
+	defer close(wiseCorrelationCh)
+
+	if err := processing.OutputWISE(processing.WiseConfig{
+		Client: redis.NewClient(&redis.Options{
+			Addr:     viper.GetString("wise.correlations.redis.host"),
+			DB:       viper.GetInt("wise.correlations.redis.db"),
+			Password: viper.GetString("wise.correlations.redis.password"),
+		}),
+		Ctx:         poolCtx,
+		Logger:      log,
+		Pool:        pool,
+		Enrichments: wiseCorrelationCh,
+	}); err != nil {
+		log.Fatal(err)
+	}
+
 	if err := processing.CorrelateSysmonEvents(processing.SysmonCorrelateConfig{
 		Workers: viper.GetInt("workers.sysmon.correlate"),
 		Pool:    pool,
 		Ctx:     poolCtx,
 		Logger:  log,
 		Shards:  shards,
+		WinlogConfig: processing.WinlogConfig{
+			StoreNetEvents: true,
+			WorkDir:        viper.GetString("general.work_dir"),
+			Destination:    wiseCorrelationCh,
+			Buckets: processing.WinlogBucketsConfig{
+				Command: processing.BucketsConfig{
+					Count: 4,
+					Size:  15 * time.Minute,
+				},
+				Network: processing.BucketsConfig{
+					Count: 2,
+					Size:  15 * time.Second,
+				},
+			},
+		},
 	}); err != nil {
 		log.Fatal(err)
 	}
@@ -98,9 +134,20 @@ func init() {
 	pFlags.String("sysmon-redis-key", "winlogbeat", "Redis key for winlogbeat messages.")
 	viper.BindPFlag("sysmon.redis.key", pFlags.Lookup("sysmon-redis-key"))
 
+	// workers setup
 	pFlags.Int("workers-sysmon-consume", 2, "Number of workers for sysmon consume and JSON decode.")
 	viper.BindPFlag("workers.sysmon.consume", pFlags.Lookup("workers-sysmon-consume"))
 
 	pFlags.Int("workers-sysmon-correlate", 2, "Number of workers for sysmon correlation.")
 	viper.BindPFlag("workers.sysmon.correlate", pFlags.Lookup("workers-sysmon-correlate"))
+
+	// wise output - correlations
+	pFlags.String("wise-correlations-redis-host", "localhost:6379", "Redis host output correlations for WISE.")
+	viper.BindPFlag("wise.correlations.redis.host", pFlags.Lookup("wise-correlations-redis-host"))
+
+	pFlags.Int("wise-correlations-redis-db", 0, "Redis database for WISE correlations.")
+	viper.BindPFlag("wise.correlations.redis.db", pFlags.Lookup("wise-correlations-redis-db"))
+
+	pFlags.String("wise-correlations-redis-password", "", "Password for WISE Redis correlations. Empty value disables authentication.")
+	viper.BindPFlag("wise.correlations.redis.password", pFlags.Lookup("wise-correlations-redis-password"))
 }

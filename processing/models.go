@@ -155,14 +155,6 @@ func extractNetworkEntryECS(e datamodels.Map, guid string) (*networkEntry, error
 	}, nil
 }
 
-type ConfigRedisInstance struct {
-	Host     string
-	Database int
-	Key      string
-	Batch    int64
-	Password string
-}
-
 type wiseEntry struct {
 	ProcessName string `json:"processname"`
 	UserName    string `json:"username"`
