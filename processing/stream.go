@@ -259,6 +259,7 @@ func OutputWISE(c WiseConfig) error {
 						lctx.Error(err)
 						continue loop
 					}
+					c.ClientCorrelated.Expire(context.Background(), e.Key, 5*time.Minute)
 				}
 			case e, ok := <-c.ChanOnlyNetwork:
 				if ok && c.ForwardNetworkEvents && c.ClientOnlyNetwork != nil {
@@ -266,6 +267,7 @@ func OutputWISE(c WiseConfig) error {
 						lctx.Error(err)
 						continue loop
 					}
+					c.ClientOnlyNetwork.Expire(context.Background(), e.Key, 5*time.Minute)
 				}
 			}
 		}
