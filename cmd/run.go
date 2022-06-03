@@ -38,19 +38,28 @@ func run(cmd *cobra.Command, args []string) {
 	}
 	defer shards.Close()
 
-	wiseCorrelationCh := make(chan processing.EncodedEnrichment)
+	wiseCorrelationCh := make(chan processing.EncodedEntry)
 	defer close(wiseCorrelationCh)
+	wiseConnectionCh := make(chan processing.EncodedEntry)
+	defer close(wiseConnectionCh)
 
 	if err := processing.OutputWISE(processing.WiseConfig{
-		Client: redis.NewClient(&redis.Options{
+		Ctx:                  poolCtx,
+		Logger:               log,
+		Pool:                 pool,
+		ForwardNetworkEvents: viper.GetBool("wise.connections.redis.enabled"),
+		ClientOnlyNetwork: redis.NewClient(&redis.Options{
+			Addr:     viper.GetString("wise.connections.redis.host"),
+			DB:       viper.GetInt("wise.connections.redis.db"),
+			Password: viper.GetString("wise.connections.redis.password"),
+		}),
+		ChanOnlyNetwork: wiseConnectionCh,
+		ClientCorrelated: redis.NewClient(&redis.Options{
 			Addr:     viper.GetString("wise.correlations.redis.host"),
 			DB:       viper.GetInt("wise.correlations.redis.db"),
 			Password: viper.GetString("wise.correlations.redis.password"),
 		}),
-		Ctx:         poolCtx,
-		Logger:      log,
-		Pool:        pool,
-		Enrichments: wiseCorrelationCh,
+		ChanCorrelated: wiseCorrelationCh,
 	}); err != nil {
 		log.Fatal(err)
 	}
@@ -62,9 +71,11 @@ func run(cmd *cobra.Command, args []string) {
 		Logger:  log,
 		Shards:  shards,
 		WinlogConfig: processing.WinlogConfig{
-			StoreNetEvents: true,
-			WorkDir:        viper.GetString("general.work_dir"),
-			Destination:    wiseCorrelationCh,
+			StoreNetEvents:       true,
+			WorkDir:              viper.GetString("general.work_dir"),
+			ChanCorrelated:       wiseCorrelationCh,
+			ChanOnlyNetwork:      wiseConnectionCh,
+			ForwardNetworkEvents: viper.GetBool("wise.connections.redis.enabled"),
 			Buckets: processing.WinlogBucketsConfig{
 				Command: processing.BucketsConfig{
 					Count: 4,
@@ -142,12 +153,25 @@ func init() {
 	viper.BindPFlag("workers.sysmon.correlate", pFlags.Lookup("workers-sysmon-correlate"))
 
 	// wise output - correlations
-	pFlags.String("wise-correlations-redis-host", "localhost:6379", "Redis host output correlations for WISE.")
+	pFlags.String("wise-correlations-redis-host", "localhost:6379", "Redis host output correlations for WISE. Event ID 1 + 3.")
 	viper.BindPFlag("wise.correlations.redis.host", pFlags.Lookup("wise-correlations-redis-host"))
 
-	pFlags.Int("wise-correlations-redis-db", 0, "Redis database for WISE correlations.")
+	pFlags.Int("wise-correlations-redis-db", 1, "Redis database for WISE correlations.")
 	viper.BindPFlag("wise.correlations.redis.db", pFlags.Lookup("wise-correlations-redis-db"))
 
 	pFlags.String("wise-correlations-redis-password", "", "Password for WISE Redis correlations. Empty value disables authentication.")
 	viper.BindPFlag("wise.correlations.redis.password", pFlags.Lookup("wise-correlations-redis-password"))
+
+	// wise output - only connections, no correlated process creation info
+	pFlags.Bool("wise-connection-redis-enabled", false, "Enable forwarding of raw network events with not ID 1 correlation.")
+	viper.BindPFlag("wise.connections.redis.enabled", pFlags.Lookup("wise-connection-redis-enabled"))
+
+	pFlags.String("wise-connections-redis-host", "localhost:6379", "Redis host output connections for WISE. Only event ID 3.")
+	viper.BindPFlag("wise.connections.redis.host", pFlags.Lookup("wise-connections-redis-host"))
+
+	pFlags.Int("wise-connections-redis-db", 2, "Redis database for WISE connections.")
+	viper.BindPFlag("wise.connections.redis.db", pFlags.Lookup("wise-connections-redis-db"))
+
+	pFlags.String("wise-connections-redis-password", "", "Password for WISE Redis connections. Empty value disables authentication.")
+	viper.BindPFlag("wise.connections.redis.password", pFlags.Lookup("wise-connections-redis-password"))
 }

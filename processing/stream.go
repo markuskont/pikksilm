@@ -199,16 +199,22 @@ func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
 }
 
 type WiseConfig struct {
-	Client      *redis.Client
-	Ctx         context.Context
-	Logger      *logrus.Logger
-	Pool        *errgroup.Group
-	Enrichments <-chan EncodedEnrichment
+	Ctx    context.Context
+	Logger *logrus.Logger
+	Pool   *errgroup.Group
+
+	ClientCorrelated  *redis.Client
+	ClientOnlyNetwork *redis.Client
+
+	ForwardNetworkEvents bool
+
+	ChanCorrelated  <-chan EncodedEntry
+	ChanOnlyNetwork <-chan EncodedEntry
 }
 
 func OutputWISE(c WiseConfig) error {
-	if c.Client == nil {
-		return errors.New("WISE redis host missing")
+	if c.ClientCorrelated == nil {
+		return errors.New("WISE redis host missing for correlations")
 	}
 	if c.Pool == nil {
 		return errors.New("missing worker pool")
@@ -219,10 +225,21 @@ func OutputWISE(c WiseConfig) error {
 	if c.Logger == nil {
 		return errors.New("missing logger")
 	}
-	if c.Enrichments == nil {
+	if c.ChanCorrelated == nil {
 		return errors.New("enrichment channel missing")
 	}
-	if err := waitOnRedis(c.Ctx, c.Client, c.Logger); err != nil {
+	if c.ChanOnlyNetwork == nil {
+		return errors.New("network event channel missing")
+	}
+	if c.ForwardNetworkEvents {
+		if c.ClientOnlyNetwork == nil {
+			return errors.New("WISE redis host missing for network events")
+		}
+		if err := waitOnRedis(c.Ctx, c.ClientOnlyNetwork, c.Logger); err != nil {
+			return err
+		}
+	}
+	if err := waitOnRedis(c.Ctx, c.ClientCorrelated, c.Logger); err != nil {
 		return err
 	}
 	c.Pool.Go(func() error {
@@ -236,13 +253,19 @@ func OutputWISE(c WiseConfig) error {
 			case <-c.Ctx.Done():
 				lctx.Info("caught exit")
 				break loop
-			case e, ok := <-c.Enrichments:
-				if !ok {
-					break loop
+			case e, ok := <-c.ChanCorrelated:
+				if ok {
+					if err := c.ClientCorrelated.LPush(context.Background(), e.Key, e.Entry).Err(); err != nil {
+						lctx.Error(err)
+						continue loop
+					}
 				}
-				if err := c.Client.LPush(context.Background(), e.Key, e.Entry).Err(); err != nil {
-					lctx.Error(err)
-					continue loop
+			case e, ok := <-c.ChanOnlyNetwork:
+				if ok && c.ForwardNetworkEvents && c.ClientOnlyNetwork != nil {
+					if err := c.ClientOnlyNetwork.LPush(context.Background(), e.Key, e.Entry).Err(); err != nil {
+						lctx.Error(err)
+						continue loop
+					}
 				}
 			}
 		}

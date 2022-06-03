@@ -6,7 +6,7 @@ import (
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-type EncodedEnrichment struct {
+type EncodedEntry struct {
 	Key   string
 	Entry []byte
 }

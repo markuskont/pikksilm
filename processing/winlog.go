@@ -48,8 +48,8 @@ type winlogBuckets struct {
 type Winlog struct {
 	gommunityid.CommunityID
 
-	// Enrichments map[string]models.Entry
-	enrichments chan EncodedEnrichment
+	chCorrelated  chan EncodedEntry
+	chOnlyNetwork chan EncodedEntry
 
 	buckets *winlogBuckets
 
@@ -58,6 +58,9 @@ type Winlog struct {
 	// weather to keep network events in buckets or not
 	// for potential out of order messages, is memory intentsive
 	storeNetEvents bool
+
+	// emit network events that do not have positive correlation
+	forwardNetEvents bool
 
 	Stats winlogStats
 }
@@ -73,10 +76,6 @@ func (c Winlog) persist() error {
 
 func (c *Winlog) Close() error {
 	return c.persist()
-}
-
-func (c *Winlog) Enrichments() <-chan EncodedEnrichment {
-	return c.enrichments
 }
 
 func (c Winlog) CmdLen() int { return len(c.buckets.commands.Buckets) }
@@ -104,6 +103,10 @@ func (c *Winlog) Process(e datamodels.Map) error {
 		if err != nil {
 			return err
 		}
+		id, err := ne.communityID(c.CommunityID)
+		if err != nil {
+			return err
+		}
 
 		// check if we already have corresponding command event cached
 		var found bool
@@ -116,12 +119,8 @@ func (c *Winlog) Process(e datamodels.Map) error {
 			if !ok {
 				return nil
 			}
-			id, err := ne.communityID(c.CommunityID)
-			if err != nil {
-				return err
-			}
 			command.Set(id, "network", "community_id")
-			c.send(command, id)
+			c.sendCorrelated(command, id)
 			found = true
 			// command was already found in latest bucket, no need to move it
 			if c.buckets.commands.Current.Equal(b.Time) {
@@ -142,6 +141,12 @@ func (c *Winlog) Process(e datamodels.Map) error {
 			})
 		}); err != nil {
 			return err
+		}
+
+		// Event 1 caching was not found, forward network event as-is if enabled
+		if !found && c.forwardNetEvents {
+			e.Set(id, "network", "community_id")
+			c.sendNetworkEvent(e, id)
 		}
 
 		// TODO - this actually seems kinda pointless, maybe ditch this code path entirely
@@ -191,7 +196,7 @@ func (c *Winlog) Process(e datamodels.Map) error {
 						c.Stats.NetEventsPopped++
 						e.Set(id, "network", "community_id")
 						// TODO - handle potential error
-						c.send(e, id)
+						c.sendCorrelated(e, id)
 					}
 				}
 				return nil
@@ -204,13 +209,22 @@ func (c *Winlog) Process(e datamodels.Map) error {
 	return nil
 }
 
-func (c *Winlog) send(e datamodels.Map, key string) error {
+func (c *Winlog) sendCorrelated(e datamodels.Map, key string) error {
 	c.Stats.Enriched++
 	data, err := json.Marshal(e)
 	if err != nil {
 		return err
 	}
-	c.enrichments <- EncodedEnrichment{Entry: data, Key: key}
+	c.chCorrelated <- EncodedEntry{Entry: data, Key: key}
+	return nil
+}
+
+func (c *Winlog) sendNetworkEvent(e datamodels.Map, key string) error {
+	data, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+	c.chOnlyNetwork <- EncodedEntry{Entry: data, Key: key}
 	return nil
 }
 
@@ -220,14 +234,16 @@ type WinlogBucketsConfig struct {
 }
 
 type WinlogConfig struct {
-	Buckets        WinlogBucketsConfig
-	StoreNetEvents bool
-	WorkDir        string
-	Destination    chan EncodedEnrichment
+	Buckets              WinlogBucketsConfig
+	StoreNetEvents       bool
+	WorkDir              string
+	ChanCorrelated       chan EncodedEntry
+	ChanOnlyNetwork      chan EncodedEntry
+	ForwardNetworkEvents bool
 }
 
 func NewWinlog(c WinlogConfig) (*Winlog, error) {
-	if c.Destination == nil {
+	if c.ChanCorrelated == nil {
 		return nil, errors.New("missing correlation dest chan")
 	}
 	cid, err := gommunityid.GetCommunityIDByVersion(1, 0)
@@ -263,10 +279,16 @@ func NewWinlog(c WinlogConfig) (*Winlog, error) {
 		commands: commands,
 	}
 
-	if c.Destination != nil {
-		w.enrichments = c.Destination
+	if c.ChanCorrelated != nil {
+		w.chCorrelated = c.ChanCorrelated
 	} else {
-		w.enrichments = make(chan EncodedEnrichment)
+		w.chCorrelated = make(chan EncodedEntry)
 	}
+	if c.ChanOnlyNetwork != nil {
+		w.chOnlyNetwork = c.ChanOnlyNetwork
+	} else {
+		w.chOnlyNetwork = make(chan EncodedEntry)
+	}
+	w.forwardNetEvents = c.ForwardNetworkEvents
 	return w, nil
 }
