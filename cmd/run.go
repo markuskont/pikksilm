@@ -47,7 +47,7 @@ func run(cmd *cobra.Command, args []string) {
 		Ctx:                  poolCtx,
 		Logger:               log,
 		Pool:                 pool,
-		ForwardNetworkEvents: viper.GetBool("wise.connections.redis.enabled"),
+		ForwardNetworkEvents: viper.GetBool("wise.connections.enabled"),
 		ClientOnlyNetwork: redis.NewClient(&redis.Options{
 			Addr:     viper.GetString("wise.connections.redis.host"),
 			DB:       viper.GetInt("wise.connections.redis.db"),
@@ -75,7 +75,7 @@ func run(cmd *cobra.Command, args []string) {
 			WorkDir:              viper.GetString("general.work_dir"),
 			ChanCorrelated:       wiseCorrelationCh,
 			ChanOnlyNetwork:      wiseConnectionCh,
-			ForwardNetworkEvents: viper.GetBool("wise.connections.redis.enabled"),
+			ForwardNetworkEvents: viper.GetBool("wise.connections.enabled"),
 			Buckets: processing.WinlogBucketsConfig{
 				Command: processing.BucketsConfig{
 					Count: 4,
@@ -163,8 +163,8 @@ func init() {
 	viper.BindPFlag("wise.correlations.redis.password", pFlags.Lookup("wise-correlations-redis-password"))
 
 	// wise output - only connections, no correlated process creation info
-	pFlags.Bool("wise-connection-redis-enabled", false, "Enable forwarding of raw network events with not ID 1 correlation.")
-	viper.BindPFlag("wise.connections.redis.enabled", pFlags.Lookup("wise-connection-redis-enabled"))
+	pFlags.Bool("wise-connection-enabled", false, "Enable forwarding of raw network events with not ID 1 correlation.")
+	viper.BindPFlag("wise.connections.enabled", pFlags.Lookup("wise-connection-enabled"))
 
 	pFlags.String("wise-connections-redis-host", "localhost:6379", "Redis host output connections for WISE. Only event ID 3.")
 	viper.BindPFlag("wise.connections.redis.host", pFlags.Lookup("wise-connections-redis-host"))
