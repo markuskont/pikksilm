@@ -14,6 +14,24 @@ Sysmon Event ID 1 and 3 can be correlated using the `entity_id` value. Informati
 
 Firstly, make sure you have a functioning winlogbeat setup that forwards all logs to a redis instance. Please refer to [`third_party`](/third_party/elastic) folder for configuration examples. Please note that at the time only ECS formatted messages are supported, which requires winlogbeat 7 with client-side processor script. Also note that configuration files in this repository are meant to be simple examples for setting up lab environments. Production setup would require specific winlogbeat event IDs to be forwarded from Logstash to Redis instead.
 
+Winlogbeat must be set up on all monitored Windows machines.
+
+### Sysmon
+
+Download [Sysmon](https://docs.microsoft.com/en-us/sysinternals/downloads/sysmon) from sysinternals. You also need a configuration with XML schema version that corresponds to sysmon version. I recommend [Sysmon modular](https://github.com/olafhartong/sysmon-modular#pre-grenerated-configurations). Then go to folder that contains downloaded sysmon binaries and configuration XML and use following command to install it.
+
+```
+Sysmon64.exe -accepteula -i sysmonconfig.xml
+```
+
+Or you can use the following command to update config to existing installation.
+
+```
+Sysmon64.exe -c sysmonconfig.xml
+```
+
+This needs to be done on all monitored Windows machines.
+
 ### Building pikksilm
 
 Binary tagged releases can be downloaded from Releases section. However, latest commit can easily be built from source, provided you already have a working Go setup. Simply clone the repo and build a binary.
@@ -215,7 +233,7 @@ INFO[38370] stream report                                 cmd_bucket_moves=0 cou
 
 ### Suricata
 
-Suricata EVE enrichment is supported in backend. However, unlike Arkime which can be enriched through WISE, Suricata events need to be streamed through pikksilm. This was implemented in initial prototype but the feature has not yet been reworked for new multi-worker setup. Stay posted on use a older version from Releases. Do note that older versions use different configuration syntax that does not reflect this documentation.
+**Coming soon**. Suricata EVE enrichment is supported in backend. However, unlike Arkime which can be enriched through WISE, Suricata events need to be streamed through pikksilm. This was implemented in initial prototype but the feature has not yet been reworked for new multi-worker setup. Stay posted or use a older version from Releases. Do note that older versions use different configuration syntax that does not reflect this documentation.
 
 ### Systemd service
 
