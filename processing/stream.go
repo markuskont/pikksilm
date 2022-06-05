@@ -3,6 +3,8 @@ package processing
 import (
 	"context"
 	"errors"
+	"os"
+	"path"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -156,6 +158,45 @@ func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
 	if c.Shards == nil {
 		return errors.New("missing shard config")
 	}
+	if len(c.Shards.Channels) != c.Workers {
+		return errors.New("worker count does not match channels")
+	}
+	var persist bool
+	if dir := c.WinlogConfig.WorkDir; dir != "" {
+		persist = true
+		pth := path.Join(dir, "correlate.json")
+		if !dumpNotExists(pth) {
+			f, err := os.Open(pth)
+			if err != nil {
+				return err
+			}
+			var meta metaCorrelate
+			if err := json.NewDecoder(f).Decode(&meta); err != nil {
+				return err
+			}
+			if meta.Workers != c.Workers {
+				c.
+					Logger.
+					WithField("old", meta.Workers).
+					WithField("new", c.Workers).
+					Warn("correlate worker count does not match old one, disabling persist")
+				persist = false
+			}
+			f.Close()
+		} else {
+			c.Logger.
+				WithField("path", pth).
+				Warning("correlate meta dump does not exist")
+		}
+		f, err := os.Create(pth)
+		if err != nil {
+			return err
+		}
+		if err := json.NewEncoder(f).Encode(metaCorrelate{Workers: c.Workers}); err != nil {
+			return err
+		}
+		f.Close()
+	}
 	for i := 0; i < c.Workers; i++ {
 		worker := i
 		ch := c.Shards.Channels[worker]
@@ -168,16 +209,36 @@ func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
 				WithField("task", "correlate")
 			lctx.Info("worker setting up")
 
-			winlog, err := NewWinlog(c.WinlogConfig)
+			var data []Bucket
+			if persist && c.WorkDir != "" {
+				if pth := correlateDumpFmt(c.WorkDir, worker) + ".gz"; !dumpNotExists(pth) {
+					if err := loadPersist(pth, &data); err != nil {
+						return err
+					}
+					lctx.WithField("items", len(data)).Debug("loaded command persistence")
+				} else {
+					lctx.WithField("path", pth).Warn("no command persistence to load")
+				}
+			}
+
+			winlog, err := NewWinlog(c.WinlogConfig, data)
 			if err != nil {
 				return err
 			}
 
 			report := time.NewTicker(15 * time.Second)
 			defer report.Stop()
+
+			persist := time.NewTicker(5 * time.Minute)
+			defer persist.Stop()
+
+			defer correlateWriteDump(c, lctx, worker, winlog.buckets.commands.Buckets)
 		loop:
 			for {
 				select {
+				case <-persist.C:
+					// periodic command dump
+					correlateWriteDump(c, lctx, worker, winlog.buckets.commands.Buckets)
 				case <-report.C:
 					lctx.WithFields(winlog.Stats.fields()).Info("stream report")
 				case entry, ok := <-ch:
@@ -302,3 +363,19 @@ func balanceString(value string, count uint64) int {
 }
 
 func assignWorker(hash, workerCount uint64) int { return int(hash % workerCount) }
+
+// unlike persist.go functions, this is really specific to correlation worker
+func correlateWriteDump(
+	c SysmonCorrelateConfig,
+	lctx *logrus.Entry,
+	worker int,
+	data []Bucket,
+) {
+	if c.WorkDir != "" {
+		path := correlateDumpFmt(c.WorkDir, worker)
+		lctx.WithField("path", path).Debug("writing command peristence")
+		if err := dumpPersist(path, data); err != nil {
+			lctx.Error(err)
+		}
+	}
+}

@@ -67,7 +67,7 @@ type Winlog struct {
 
 func (c Winlog) persist() error {
 	if c.persistCommand != "" {
-		if err := dumpBucketPersist(c.persistCommand, *c.buckets.commands); err != nil {
+		if err := dumpPersist(c.persistCommand, *c.buckets.commands); err != nil {
 			return err
 		}
 	}
@@ -234,6 +234,7 @@ type WinlogBucketsConfig struct {
 }
 
 type WinlogConfig struct {
+	Commands             buckets
 	Buckets              WinlogBucketsConfig
 	StoreNetEvents       bool
 	WorkDir              string
@@ -242,7 +243,7 @@ type WinlogConfig struct {
 	ForwardNetworkEvents bool
 }
 
-func NewWinlog(c WinlogConfig) (*Winlog, error) {
+func NewWinlog(c WinlogConfig, cmdPersist []Bucket) (*Winlog, error) {
 	if c.ChanCorrelated == nil {
 		return nil, errors.New("missing correlation dest chan")
 	}
@@ -261,15 +262,16 @@ func NewWinlog(c WinlogConfig) (*Winlog, error) {
 
 	commands, err := newBuckets(bucketsConfig{
 		BucketsConfig:       c.Buckets.Command,
-		ContainerCreateFunc: func() any { return make(CommandEvents) },
-		Persist:             w.persistCommand,
+		containerCreateFunc: func() any { return make(CommandEvents) },
+		data:                cmdPersist,
 	})
 	if err != nil {
 		return nil, err
 	}
 	network, err := newBuckets(bucketsConfig{
 		BucketsConfig:       c.Buckets.Network,
-		ContainerCreateFunc: func() any { return make(networkEvents, 0) },
+		containerCreateFunc: func() any { return make(networkEvents, 0) },
+		data:                nil,
 	})
 	if err != nil {
 		return nil, err

@@ -40,7 +40,7 @@ func TestInsertCurrent(t *testing.T) {
 	b, err := newBuckets(
 		bucketsConfig{
 			BucketsConfig:       cfg,
-			ContainerCreateFunc: func() any { return make(networkEvents, 0) },
+			containerCreateFunc: func() any { return make(networkEvents, 0) },
 		},
 	)
 	assert.Nil(t, err)
@@ -67,7 +67,7 @@ func TestBucketExpand(t *testing.T) {
 	buckets, err := newBuckets(
 		bucketsConfig{
 			BucketsConfig:       cfg,
-			ContainerCreateFunc: func() any { return make(networkEvents, 0) },
+			containerCreateFunc: func() any { return make(networkEvents, 0) },
 		},
 	)
 	assert.Nil(t, err)

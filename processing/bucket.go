@@ -109,11 +109,10 @@ type BucketsConfig struct {
 // private config with params not yet meant to be exposed (such as function)
 type bucketsConfig struct {
 	BucketsConfig
-	// ContainerCreateFunc can be empty value,
+	// containerCreateFunc can be empty value,
 	// in that case user is responsible for checking that b.Data is not nil
-	ContainerCreateFunc containerCreateFunc
-
-	Persist string
+	containerCreateFunc containerCreateFunc
+	data                []Bucket
 }
 
 func newBuckets(c bucketsConfig) (*buckets, error) {
@@ -123,18 +122,17 @@ func newBuckets(c bucketsConfig) (*buckets, error) {
 	if c.Size == 0 {
 		return nil, errors.New("empty bucket size")
 	}
-	if c.Persist != "" {
-		_, err := os.Stat(c.Persist)
-		if !errors.Is(err, os.ErrNotExist) {
-			return readCmdBucketData(c.Persist, c.ContainerCreateFunc)
-		}
-	}
-	return &buckets{
-		Buckets:      make([]Bucket, 0, c.Count),
+	b := &buckets{
 		Size:         c.Size,
 		Count:        c.Count,
-		onCreateFunc: c.ContainerCreateFunc,
-	}, nil
+		onCreateFunc: c.containerCreateFunc,
+	}
+	if c.data != nil {
+		b.Buckets = c.data
+	} else {
+		b.Buckets = make([]Bucket, 0, c.Count)
+	}
+	return b, nil
 }
 
 func readBucketPersist(path string, ccFunc containerCreateFunc) (*buckets, error) {
@@ -182,15 +180,4 @@ func readCmdBucketData(path string, ccFunc containerCreateFunc) (*buckets, error
 	}
 	castConcreteCmdEvents(b.Buckets)
 	return b, nil
-}
-
-func dumpBucketPersist(path string, b buckets) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	gw := gzip.NewWriter(f)
-	defer gw.Close()
-	return json.NewEncoder(gw).Encode(b)
 }

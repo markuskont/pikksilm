@@ -104,7 +104,7 @@ type SuricataConfig struct {
 func NewSuricata(c SuricataConfig) (*Suricata, error) {
 	commands, err := newBuckets(bucketsConfig{
 		BucketsConfig: c.CommandBuckets,
-		ContainerCreateFunc: func() any {
+		containerCreateFunc: func() any {
 			return make(CommandEvents)
 		},
 	})
@@ -116,7 +116,7 @@ func NewSuricata(c SuricataConfig) (*Suricata, error) {
 			Count: 5,
 			Size:  2 * time.Second,
 		},
-		ContainerCreateFunc: newEntries,
+		containerCreateFunc: newEntries,
 	})
 	if err != nil {
 		return nil, err
