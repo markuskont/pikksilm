@@ -211,7 +211,7 @@ func (c *Winlog) sendCorrelated(e datamodels.Map, key string) error {
 	}
 	c.chCorrelated <- EncodedEntry{Entry: data, Key: key}
 	if c.writerCorrelate != nil {
-		if _, err := c.writerCorrelate.Write(data); err != nil {
+		if _, err := c.writerCorrelate.Write(append(data, []byte("\n")...)); err != nil {
 			return err
 		}
 	}
