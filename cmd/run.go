@@ -65,11 +65,12 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	if err := processing.CorrelateSysmonEvents(processing.SysmonCorrelateConfig{
-		Workers: viper.GetInt("workers.sysmon.correlate"),
-		Pool:    pool,
-		Ctx:     poolCtx,
-		Logger:  log,
-		Shards:  shards,
+		Workers:         viper.GetInt("workers.sysmon.correlate"),
+		Pool:            pool,
+		Ctx:             poolCtx,
+		Logger:          log,
+		Shards:          shards,
+		LogCorrelations: viper.GetBool("general.log.correlations"),
 		WinlogConfig: processing.WinlogConfig{
 			StoreNetEvents:       true,
 			WorkDir:              viper.GetString("general.work_dir"),
@@ -131,6 +132,9 @@ func init() {
 	// runtime and workers setup
 	pFlags.String("work-dir", "/var/lib/pikksilm", "Working directory. Used for persistence. Pikksilm needs write access")
 	viper.BindPFlag("general.work_dir", pFlags.Lookup("work-dir"))
+
+	pFlags.Bool("log-correlations", false, "Log correlated events to per-worker log file. Mainly for debugging.")
+	viper.BindPFlag("general.log.correlations", pFlags.Lookup("log-correlations"))
 
 	// sysmon consumer
 	pFlags.String("sysmon-redis-host", "localhost:6379", "Redis host to consume sysmon from.")
