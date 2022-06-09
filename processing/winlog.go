@@ -3,7 +3,6 @@ package processing
 import (
 	"errors"
 	"io"
-	"path"
 
 	"github.com/markuskont/datamodels"
 	"github.com/satta/gommunityid"
@@ -56,8 +55,6 @@ type Winlog struct {
 
 	buckets *winlogBuckets
 
-	persistCommand string
-
 	// weather to keep network events in buckets or not
 	// for potential out of order messages, is memory intentsive
 	storeNetEvents bool
@@ -68,20 +65,11 @@ type Winlog struct {
 	Stats winlogStats
 }
 
-func (c Winlog) persist() error {
-	if c.persistCommand != "" {
-		if err := dumpPersist(c.persistCommand, *c.buckets.commands); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (c *Winlog) Close() error {
 	if c.writerCorrelate != nil {
 		c.writerCorrelate.Close()
 	}
-	return c.persist()
+	return nil
 }
 
 func (c Winlog) CmdLen() int { return len(c.buckets.commands.Buckets) }
@@ -266,9 +254,6 @@ func newWinlog(c WinlogConfig, cmdPersist []Bucket, corrWriter io.WriteCloser) (
 		CommunityID:     cid,
 		storeNetEvents:  c.StoreNetEvents,
 		writerCorrelate: corrWriter,
-	}
-	if c.WorkDir != "" {
-		w.persistCommand = path.Join(c.WorkDir, "event_id_1.json.gz")
 	}
 
 	commands, err := newBuckets(bucketsConfig{
