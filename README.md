@@ -2,7 +2,7 @@
 
 Pikksilm is Estonian for *looking glass*. It is a streaming log correlation tool that enriches NDR events with EDR data. The tool is written entirely in Go.
 
-It was developed for and used by Estonian blue team during Locked Shields 2022 execution. The idea is to correlate Sysmon events 1 (Process creation) and 3 (Network connection seen), and to use those correlations enrich corresponding network capture sessions in Arkime and Suricata.
+It was developed for and used by Estonian-Georgian Blue Team during Locked Shields 2022 execution. The idea is to correlate Sysmon events 1 (Process creation) and 3 (Network connection seen), and to use those correlations enrich corresponding network capture sessions in Arkime and Suricata.
 
 ## Core formula
 
@@ -237,7 +237,7 @@ INFO[38370] stream report                                 cmd_bucket_moves=0 cou
 
 ### Systemd service
 
-Place service file into `/etc/systemd/system` and execute `systemctl daemon-reload`. **Please ensure that file paths match your setup.**.
+Place service file into `/etc/systemd/system` and execute `systemctl daemon-reload`. **Please ensure that file paths match your setup**.
 
 ```
 [Unit]
