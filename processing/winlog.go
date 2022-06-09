@@ -2,6 +2,7 @@ package processing
 
 import (
 	"errors"
+	"io"
 	"path"
 
 	"github.com/markuskont/datamodels"
@@ -51,6 +52,8 @@ type Winlog struct {
 	chCorrelated  chan EncodedEntry
 	chOnlyNetwork chan EncodedEntry
 
+	writerCorrelate io.WriteCloser
+
 	buckets *winlogBuckets
 
 	persistCommand string
@@ -75,6 +78,9 @@ func (c Winlog) persist() error {
 }
 
 func (c *Winlog) Close() error {
+	if c.writerCorrelate != nil {
+		c.writerCorrelate.Close()
+	}
 	return c.persist()
 }
 
@@ -216,6 +222,11 @@ func (c *Winlog) sendCorrelated(e datamodels.Map, key string) error {
 		return err
 	}
 	c.chCorrelated <- EncodedEntry{Entry: data, Key: key}
+	if c.writerCorrelate != nil {
+		if _, err := c.writerCorrelate.Write(data); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -243,7 +254,7 @@ type WinlogConfig struct {
 	ForwardNetworkEvents bool
 }
 
-func NewWinlog(c WinlogConfig, cmdPersist []Bucket) (*Winlog, error) {
+func newWinlog(c WinlogConfig, cmdPersist []Bucket, corrWriter io.WriteCloser) (*Winlog, error) {
 	if c.ChanCorrelated == nil {
 		return nil, errors.New("missing correlation dest chan")
 	}
@@ -252,10 +263,10 @@ func NewWinlog(c WinlogConfig, cmdPersist []Bucket) (*Winlog, error) {
 		return nil, err
 	}
 	w := &Winlog{
-		CommunityID:    cid,
-		storeNetEvents: c.StoreNetEvents,
+		CommunityID:     cid,
+		storeNetEvents:  c.StoreNetEvents,
+		writerCorrelate: corrWriter,
 	}
-
 	if c.WorkDir != "" {
 		w.persistCommand = path.Join(c.WorkDir, "event_id_1.json.gz")
 	}

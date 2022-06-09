@@ -3,6 +3,8 @@ package processing
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path"
 	"time"
@@ -139,6 +141,7 @@ type SysmonCorrelateConfig struct {
 	Logger  *logrus.Logger
 	Shards  *DataMapShards
 
+	LogCorrelations bool
 	WinlogConfig
 }
 
@@ -209,6 +212,20 @@ func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
 				WithField("task", "correlate")
 			lctx.Info("worker setting up")
 
+			var writer io.WriteCloser
+			if c.LogCorrelations {
+				if c.WorkDir == "" {
+					return errors.New("correlation logging requires a working directory")
+				}
+				fp := path.Join(c.WorkDir, fmt.Sprintf("worker-%d-correlations.json", worker))
+				lctx.Info("setting up correlation logger")
+				f, err := os.OpenFile(fp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
+				if err != nil {
+					return err
+				}
+				writer = f
+			}
+
 			var data []Bucket
 			if persist && c.WorkDir != "" {
 				if pth := correlateDumpFmt(c.WorkDir, worker) + ".gz"; !dumpNotExists(pth) {
@@ -221,10 +238,11 @@ func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
 				}
 			}
 
-			winlog, err := NewWinlog(c.WinlogConfig, data)
+			winlog, err := newWinlog(c.WinlogConfig, data, writer)
 			if err != nil {
 				return err
 			}
+			defer winlog.Close()
 
 			report := time.NewTicker(15 * time.Second)
 			defer report.Stop()
