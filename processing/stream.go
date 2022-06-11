@@ -334,7 +334,11 @@ func OutputWISE(c WiseConfig) error {
 				break loop
 			case e, ok := <-c.ChanCorrelated:
 				if ok {
-					if err := c.ClientCorrelated.LPush(context.Background(), e.Key, e.Entry).Err(); err != nil {
+					if err := c.ClientCorrelated.LPush(
+						context.Background(),
+						e.Key,
+						e.Entry,
+					).Err(); err != nil {
 						lctx.Error(err)
 						continue loop
 					}
@@ -342,7 +346,11 @@ func OutputWISE(c WiseConfig) error {
 				}
 			case e, ok := <-c.ChanOnlyNetwork:
 				if ok && c.ForwardNetworkEvents && c.ClientOnlyNetwork != nil {
-					if err := c.ClientOnlyNetwork.LPush(context.Background(), e.Key, e.Entry).Err(); err != nil {
+					if err := c.ClientOnlyNetwork.LPush(
+						context.Background(),
+						e.Key,
+						e.Entry,
+					).Err(); err != nil {
 						lctx.Error(err)
 						continue loop
 					}

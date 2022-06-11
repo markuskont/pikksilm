@@ -2,6 +2,7 @@ package processing
 
 import (
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/markuskont/datamodels"
@@ -251,9 +252,10 @@ func newWinlog(c WinlogConfig, cmdPersist []Bucket, corrWriter io.WriteCloser) (
 		return nil, err
 	}
 	w := &Winlog{
-		CommunityID:     cid,
-		storeNetEvents:  c.StoreNetEvents,
-		writerCorrelate: corrWriter,
+		CommunityID:      cid,
+		storeNetEvents:   c.StoreNetEvents,
+		writerCorrelate:  corrWriter,
+		forwardNetEvents: c.ForwardNetworkEvents,
 	}
 
 	commands, err := newBuckets(bucketsConfig{
@@ -287,6 +289,5 @@ func newWinlog(c WinlogConfig, cmdPersist []Bucket, corrWriter io.WriteCloser) (
 	} else {
 		w.chOnlyNetwork = make(chan EncodedEntry)
 	}
-	w.forwardNetEvents = c.ForwardNetworkEvents
 	return w, nil
 }
