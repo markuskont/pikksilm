@@ -213,6 +213,14 @@ workers:
 
 ```
 
+Ensure that workind directory defined under `general.work_dir` exists and is writable to user executing the tool. You should create a dedicated service account for production setup. Otherwise, simply reconfigure `general.work_dir` to point towards freely chosen directory that is writable to your user. Do also note that pikksilm will attempt to read persistence data on startup. **If you have already executed pikksilm as another user, then it might crash.** That's because persistence files might belong to old user, resulting in permissions error. This is a common mistake when testing on a server as `root` and then trying to set up a service account for systemd.
+
+```
+grep pikksilm /etc/passwd || useradd --system -d /var/lib/pikksilm pikksilm
+mkdir -p /var/lib/pikksilm
+chown pikksilm /var/lib/pikksilm
+```
+
 Finally, execute the `run` subcommand while pointing pikksilm to config.
 
 ```
