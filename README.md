@@ -102,35 +102,34 @@ Add custom view to `config.ini`.
 
 ```
 [custom-views]
-sysmon=title:Sysmon correlation;require:sysmon;fields:sysmon.parentprocessname,sysmon.parentprocesspid,sysmon.processname,sysmon.processpid,sysmon.username,sysmon.hostname,sysmon.hostip,sysmon.hostmac
+sysmon=title:Sysmon correlation;require:sysmon;fields:sysmon.parentprocessname,sysmon.parentprocesspid,sysmon.processname,sysmon.processpid,sysmon.username,sysmon.hostname,sysmon.hostip,sysmon.hostmac,sysmon.workingdir,sysmon.commandline,sysmon.parentcommandline
 ```
 
 Add the following two sections to `wise.ini`. Note that both are required even if you only configure correlations, as either defines only half of the required database fields.
 
 ```
-[redis:sysmon]
-url=redis://:password@127.0.0.1:6379/1
-redisURL=redis://:password@127.0.0.1:6379/1
-tags=correlation
+[redis:pikksilm1]
+url=redis://127.0.0.1:6379/1
+redisURL=redis://127.0.0.1:6379/1
+tags=sysmon_process
 type=communityid
 format=json
 template=1:%key%
 keyPath=network.community_id
-fields=field:sysmon.processname;db:sysmon.processname;kind:termfield;friendly:Process Name;shortcut:process.name\nfield:sysmon.username;db:sysmon.username;kind:termfield;friendly:User;shortcut:user.name\nfield:sysmon.hostname;db:sysmon.hostname;kind:termfield;friendly:Host Name;shortcut:host.name\nfield:sysmon.processpid;db:sysmon.processpid;kind:integer;friendly:Process PID;shortcut:process.pid\nfield:sysmon.hostip;db:sysmon.hostip;kind:ip;friendly:Host IP-s;shortcut:host.ip\nfield:sysmon.hostmac;db:sysmon.hostmac;kind:termfield;friendly:Host MAC;shortcut:host.mac
+fields=field:sysmon.parentprocessname;db:sysmon.parentprocessname;kind:termfield;friendly:Parent Process Name;shortcut:process.parent.name\nfield:sysmon.parentp rocesspid;db:sysmon.parentprocesspid;kind:termfield;friendly:Parent Process PID;shortcut:process.parent.pid\nfield:sysmon.processmd5;db:sysmon.processmd5;kind:t ermfield;friendly:Process MD5;shortcut:hash.md5\nfield:sysmon.processargs;db:sysmon.processargs;kind:textfield;friendly:Process Arguments;shortcut:process.comma nd_line\nfield:sysmon.processintlevel;db:sysmon.processintlevel;kind:termfield;friendly:Process Integrity Level;shortcut:winlog.event_data.IntegrityLevel\nfield :sysmon.processname;db:sysmon.processname;kind:termfield;friendly:Process Name;shortcut:process.name\nfield:sysmon.username;db:sysmon.username;kind:termfield;fr iendly:User;shortcut:user.name\nfield:sysmon.hostname;db:sysmon.hostname;kind:termfield;friendly:Host Name;shortcut:host.name\nfield:sysmon.processpid;db:sysmon .processpid;kind:integer;friendly:Process PID;shortcut:process.pid\nfield:sysmon.hostip;db:sysmon.hostip;kind:ip;friendly:host ip-s;shortcut:host.ip\nfield:sysm on.hostmac;db:sysmon.hostmac;kind:termfield;friendly:host mac;shortcut:host.mac\nfield:sysmon.commandline;db:sysmon.commandline;kind:termfield;friendly:Command Line;shortcut:process.command_line\nfield:sysmon.parentcommandline;db:sysmon.parentcommandline;kind:termfield;friendly:Parent Command Line;shortcut:process.pare nt.command_line\nfield:sysmon.workingdir;db:sysmon.workingdir;kind:termfield;friendly:Working Directory;shortcut:process.working_directory
 redisMethod=lpop
 ```
 
 ```
-
-[redis:sysmonevent1]
-url=redis://:password@127.0.0.1:6379/2
-redisURL=redis://:password@127.0.0.1:6379/2
-tags=connection
+[redis:pikksilm3]
+url=redis://127.0.0.1:6379/2
+redisURL=redis://127.0.0.1:6379/2
+tags=sysmon_connection
 type=communityid
 format=json
 template=1:%key%
 keyPath=network.community_id
-fields=field:sysmon.parentprocessname;db:sysmon.parentprocessname;kind:termfield;friendly:Parent Process Name;shortcut:process.parent.name\nfield:sysmon.parentprocesspid;db:sysmon.parentprocesspid;kind:termfield;friendly:Parent Process PID;shortcut:process.parent.pid\nfield:sysmon.processmd5;db:sysmon.processmd5;kind:termfield;friendly:Process MD5;shortcut:hash.md5\nfield:sysmon.processargs;db:sysmon.processargs;kind:textfield;friendly:Process Arguments;shortcut:process.command_line\nfield:sysmon.processintlevel;db:sysmon.processintlevel;kind:termfield;friendly:Process Integrity Level;shortcut:winlog.event_data.IntegrityLevel\n
+fields=field:sysmon.parentprocessname;db:sysmon.parentprocessname;kind:termfield;friendly:Parent Process Name;shortcut:process.parent.name\nfield:sysmon.parentprocesspid;db:sysmon.parentprocesspid;kind:termfield;friendly:Parent Process PID;shortcut:process.parent.pid\nfield:sysmon.processmd5;db:sysmon.processmd5;kind:termfield;friendly:Process MD5;shortcut:hash.md5\nfield:sysmon.processargs;db:sysmon.processargs;kind:textfield;friendly:Process Arguments;shortcut:process.command_line\nfield:sysmon.processintlevel;db:sysmon.processintlevel;kind:termfield;friendly:Process Integrity Level;shortcut:winlog.event_data.IntegrityLevel\nfield:sysmon.processname;db:sysmon.processname;kind:termfield;friendly:Process Name;shortcut:process.name\nfield:sysmon.username;db:sysmon.username;kind:termfield;friendly:User;shortcut:user.name\nfield:sysmon.hostname;db:sysmon.hostname;kind:termfield;friendly:Host Name;shortcut:host.name\nfield:sysmon.processpid;db:sysmon.processpid;kind:integer;friendly:Process PID;shortcut:process.pid\nfield:sysmon.hostip;db:sysmon.hostip;kind:ip;friendly:host ip-s;shortcut:host.ip\nfield:sysmon.hostmac;db:sysmon.hostmac;kind:termfield;friendly:host mac;shortcut:host.mac\nfield:sysmon.commandline;db:sysmon.commandline;kind:termfield;friendly:Command Line;shortcut:process.command_line\nfield:sysmon.parentcommandline;db:sysmon.parentcommandline;kind:termfield;friendly:Parent Command Line;shortcut:process.parent.command_line\nfield:sysmon.workingdir;db:sysmon.workingdir;kind:termfield;friendly:Working Directory;shortcut:process.working_directory
 redisMethod=lpop
 ```
 
