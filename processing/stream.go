@@ -247,7 +247,7 @@ func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
 			report := time.NewTicker(15 * time.Second)
 			defer report.Stop()
 
-			persist := time.NewTicker(5 * time.Minute)
+			persist := time.NewTicker(1 * time.Hour)
 			defer persist.Stop()
 
 			defer correlateWriteDump(c, lctx, worker, winlog.buckets.commands.Buckets)
