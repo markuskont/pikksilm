@@ -79,12 +79,12 @@ func run(cmd *cobra.Command, args []string) {
 			ForwardNetworkEvents: viper.GetBool("wise.connections.enabled"),
 			Buckets: processing.WinlogBucketsConfig{
 				Command: processing.BucketsConfig{
-					Count: 4,
-					Size:  15 * time.Minute,
+					Count: viper.GetInt("sysmon.buckets.process.count"),
+					Size:  viper.GetDuration("sysmon.buckets.process.duration"),
 				},
 				Network: processing.BucketsConfig{
-					Count: 2,
-					Size:  15 * time.Second,
+					Count: viper.GetInt("sysmon.buckets.connection.count"),
+					Size:  viper.GetDuration("sysmon.buckets.connection.duration"),
 				},
 			},
 		},
@@ -145,6 +145,18 @@ func init() {
 
 	pFlags.String("sysmon-redis-password", "", "Password for sysmon redis instance. Empty value disables authentication.")
 	viper.BindPFlag("sysmon.redis.password", pFlags.Lookup("sysmon-redis-password"))
+
+	pFlags.Int("sysmon-buckets-process-count", 4, "Number of buckets for storing event_id 1 events.")
+	viper.BindPFlag("sysmon.buckets.process.count", pFlags.Lookup("sysmon-buckets-process-count"))
+
+	pFlags.Duration("sysmon-buckets-process-duration", 15*time.Minute, "Size of event_id 1 bucket.")
+	viper.BindPFlag("sysmon.buckets.process.duration", pFlags.Lookup("sysmon-buckets-process-duration"))
+
+	pFlags.Int("sysmon-buckets-connection-count", 2, "Number of buckets for storing event_id 3 events.")
+	viper.BindPFlag("sysmon.buckets.connection.count", pFlags.Lookup("sysmon-buckets-connection-count"))
+
+	pFlags.Duration("sysmon-buckets-connection-duration", 15*time.Second, "Size of event_id 3 bucket.")
+	viper.BindPFlag("sysmon.buckets.connection.duration", pFlags.Lookup("sysmon-buckets-connection-duration"))
 
 	pFlags.String("sysmon-redis-key", "winlogbeat", "Redis key for winlogbeat messages.")
 	viper.BindPFlag("sysmon.redis.key", pFlags.Lookup("sysmon-redis-key"))
