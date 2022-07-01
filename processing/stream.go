@@ -230,7 +230,7 @@ func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
 			if persist && c.WorkDir != "" {
 				if pth := correlateDumpFmt(c.WorkDir, worker) + ".gz"; !dumpNotExists(pth) {
 					if err := loadPersist(pth, &data); err != nil {
-						return err
+						lctx.Error(err)
 					}
 					lctx.WithField("items", len(data)).Debug("loaded command persistence")
 				} else {
