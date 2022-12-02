@@ -97,7 +97,7 @@ func run(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 
-	if err := processing.ConsumeSysmonEvents(processing.SysmonConsumeConfig{
+	if err := processing.ConsumeRedis(processing.ConfigConsumeRedis{
 		ConfigStreamRedis: processing.ConfigStreamRedis{
 			Client: redis.NewClient(&redis.Options{
 				Addr:     viper.GetString("sysmon.redis.host"),
