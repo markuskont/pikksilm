@@ -72,7 +72,7 @@ func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
 		c.Pool.Go(func() error {
 			lctx := c.Logger.
 				WithField("worker", worker).
-				WithField("task", "correlate")
+				WithField("stream", "sysmon")
 			lctx.Info("worker setting up")
 
 			var writer io.WriteCloser
@@ -121,7 +121,7 @@ func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
 					// periodic command dump
 					correlateWriteDump(c, lctx, worker, winlog.buckets.commands.Buckets)
 				case <-report.C:
-					lctx.WithFields(winlog.Stats.fields()).Info("sysmpn correlation report")
+					lctx.WithFields(winlog.Stats.fields()).Info("sysmon correlation report")
 				case entry, ok := <-ch:
 					if !ok {
 						break loop

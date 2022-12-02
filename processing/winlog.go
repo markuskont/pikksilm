@@ -55,12 +55,18 @@ type Winlog struct {
 
 	buckets *winlogBuckets
 
+	Results *SafeCorrelationEventMap
+
 	// weather to keep network events in buckets or not
 	// for potential out of order messages, is memory intentsive
 	storeNetEvents bool
 
 	// emit network events that do not have positive correlation
 	forwardNetEvents bool
+
+	// store correlation results in thread safe map
+	// needed for Suricata streaming
+	storeSafeResults bool
 
 	Stats winlogStats
 }
@@ -210,6 +216,9 @@ func (c *Winlog) sendCorrelated(e datamodels.Map, key string) error {
 		return err
 	}
 	c.chCorrelated <- EncodedEntry{Entry: data, Key: key}
+	if c.storeSafeResults && c.Results != nil {
+		c.Results.Insert(key, e)
+	}
 	if c.writerCorrelate != nil {
 		if _, err := c.writerCorrelate.Write(append(data, []byte("\n")...)); err != nil {
 			return err
@@ -240,6 +249,8 @@ type WinlogConfig struct {
 	ChanCorrelated       chan EncodedEntry
 	ChanOnlyNetwork      chan EncodedEntry
 	ForwardNetworkEvents bool
+	StoreSafeResults     bool
+	SafeResultMap        *SafeCorrelationEventMap
 }
 
 func newWinlog(c WinlogConfig, cmdPersist []Bucket, corrWriter io.WriteCloser) (*Winlog, error) {
@@ -288,5 +299,13 @@ func newWinlog(c WinlogConfig, cmdPersist []Bucket, corrWriter io.WriteCloser) (
 		w.chOnlyNetwork = make(chan EncodedEntry)
 	}
 	w.forwardNetEvents = c.ForwardNetworkEvents
+
+	w.storeSafeResults = c.StoreSafeResults
+	if c.SafeResultMap != nil {
+		w.Results = c.SafeResultMap
+	} else {
+		w.Results = NewSafeConcurrentMap()
+	}
+
 	return w, nil
 }
