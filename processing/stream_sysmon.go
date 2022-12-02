@@ -11,39 +11,23 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/markuskont/datamodels"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/sync/errgroup"
 )
 
 type SysmonConsumeConfig struct {
-	Client  *redis.Client
-	Key     string
-	Workers int
-	Pool    *errgroup.Group
-	Ctx     context.Context
-	Logger  *logrus.Logger
+	ConfigStreamWorkers
+	ConfigStreamRedis
+
 	Handler MapHandlerFunc
 }
 
 func ConsumeSysmonEvents(c SysmonConsumeConfig) error {
-	if c.Client == nil {
-		return errors.New("sysmon redis client missing")
+	if err := c.ConfigStreamWorkers.Validate(); err != nil {
+		return err
 	}
-	if c.Key == "" {
-		return errors.New("sysmon redis key missing")
+	if err := c.ConfigStreamRedis.Validate(); err != nil {
+		return err
 	}
-	if c.Workers < 1 {
-		return errors.New("invalid sysmon consumer count")
-	}
-	if c.Pool == nil {
-		return errors.New("missing worker pool")
-	}
-	if c.Ctx == nil {
-		return errors.New("missing context")
-	}
-	if c.Logger == nil {
-		return errors.New("missing logger")
-	}
+
 	if c.Handler == nil {
 		return errors.New("missing data map handler")
 	}
@@ -91,28 +75,16 @@ func ConsumeSysmonEvents(c SysmonConsumeConfig) error {
 }
 
 type SysmonCorrelateConfig struct {
-	Workers int
-	Pool    *errgroup.Group
-	Ctx     context.Context
-	Logger  *logrus.Logger
-	Shards  *DataMapShards
+	ConfigStreamWorkers
 
+	Shards          *DataMapShards
 	LogCorrelations bool
 	WinlogConfig
 }
 
 func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
-	if c.Workers < 1 {
-		return errors.New("invalid worker count")
-	}
-	if c.Pool == nil {
-		return errors.New("missing worker pool")
-	}
-	if c.Ctx == nil {
-		return errors.New("missing context")
-	}
-	if c.Logger == nil {
-		return errors.New("missing logger")
+	if err := c.Validate(); err != nil {
+		return err
 	}
 	if c.Shards == nil {
 		return errors.New("missing shard config")

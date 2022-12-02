@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 )
 
 func waitOnRedis(ctx context.Context, client *redis.Client, logger *logrus.Logger) error {
@@ -50,4 +51,55 @@ func correlateWriteDump(
 			lctx.Error(err)
 		}
 	}
+}
+
+type ConfigStreamWorkers struct {
+	Name    string
+	Workers int
+	Pool    *errgroup.Group
+	Ctx     context.Context
+	Logger  *logrus.Logger
+}
+
+func (c ConfigStreamWorkers) Validate() error {
+	if c.Workers < 1 {
+		return errors.New("invalid consumer count")
+	}
+	if c.Pool == nil {
+		return errors.New("missing worker pool")
+	}
+	if c.Ctx == nil {
+		return errors.New("missing context")
+	}
+	if c.Logger == nil {
+		return errors.New("missing logger")
+	}
+	return nil
+}
+
+func (c *ConfigStreamWorkers) SetNoWorkers() ConfigStreamWorkers {
+	if c.Logger != nil {
+		c.
+			Logger.
+			WithField("name", c.Name).
+			Debug("Resetting worker count to 1")
+	}
+	c.Workers = 1
+	return *c
+}
+
+type ConfigStreamRedis struct {
+	Client *redis.Client
+	Key    string
+}
+
+func (c ConfigStreamRedis) Validate() error {
+	if c.Client == nil {
+		return errors.New("sysmon redis client missing")
+	}
+	if c.Key == "" {
+		return errors.New("sysmon redis key missing")
+	}
+
+	return nil
 }

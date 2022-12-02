@@ -6,14 +6,10 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/sync/errgroup"
 )
 
 type WiseConfig struct {
-	Ctx    context.Context
-	Logger *logrus.Logger
-	Pool   *errgroup.Group
+	ConfigStreamWorkers
 
 	ClientCorrelated  *redis.Client
 	ClientOnlyNetwork *redis.Client
@@ -24,19 +20,21 @@ type WiseConfig struct {
 	ChanOnlyNetwork <-chan EncodedEntry
 }
 
+func (c *WiseConfig) SetNoWorkers() WiseConfig {
+	c.ConfigStreamWorkers = c.ConfigStreamWorkers.SetNoWorkers()
+	return *c
+}
+
 func OutputWISE(c WiseConfig) error {
 	if c.ClientCorrelated == nil {
 		return errors.New("WISE redis host missing for correlations")
 	}
-	if c.Pool == nil {
-		return errors.New("missing worker pool")
+	c = c.SetNoWorkers()
+
+	if err := c.Validate(); err != nil {
+		return err
 	}
-	if c.Ctx == nil {
-		return errors.New("missing context")
-	}
-	if c.Logger == nil {
-		return errors.New("missing logger")
-	}
+
 	if c.ChanCorrelated == nil {
 		return errors.New("enrichment channel missing")
 	}

@@ -44,9 +44,11 @@ func run(cmd *cobra.Command, args []string) {
 	defer close(wiseConnectionCh)
 
 	if err := processing.OutputWISE(processing.WiseConfig{
-		Ctx:                  poolCtx,
-		Logger:               log,
-		Pool:                 pool,
+		ConfigStreamWorkers: processing.ConfigStreamWorkers{
+			Ctx:    poolCtx,
+			Logger: log,
+			Pool:   pool,
+		},
 		ForwardNetworkEvents: viper.GetBool("wise.connections.enabled"),
 		ClientOnlyNetwork: redis.NewClient(&redis.Options{
 			Addr:     viper.GetString("wise.connections.redis.host"),
@@ -65,10 +67,13 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	if err := processing.CorrelateSysmonEvents(processing.SysmonCorrelateConfig{
-		Workers:         viper.GetInt("workers.sysmon.correlate"),
-		Pool:            pool,
-		Ctx:             poolCtx,
-		Logger:          log,
+		ConfigStreamWorkers: processing.ConfigStreamWorkers{
+			Name:    "correlate sysmon",
+			Workers: viper.GetInt("workers.sysmon.correlate"),
+			Pool:    pool,
+			Ctx:     poolCtx,
+			Logger:  log,
+		},
 		Shards:          shards,
 		LogCorrelations: viper.GetBool("general.log.correlations"),
 		WinlogConfig: processing.WinlogConfig{
@@ -93,17 +98,22 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	if err := processing.ConsumeSysmonEvents(processing.SysmonConsumeConfig{
-		Client: redis.NewClient(&redis.Options{
-			Addr:     viper.GetString("sysmon.redis.host"),
-			DB:       viper.GetInt("sysmon.redis.db"),
-			Password: viper.GetString("sysmon.redis.password"),
-		}),
-		Key:     viper.GetString("sysmon.redis.key"),
-		Workers: viper.GetInt("workers.sysmon.consume"),
-		Pool:    pool,
-		Ctx:     poolCtx,
-		Logger:  log,
+		ConfigStreamRedis: processing.ConfigStreamRedis{
+			Client: redis.NewClient(&redis.Options{
+				Addr:     viper.GetString("sysmon.redis.host"),
+				DB:       viper.GetInt("sysmon.redis.db"),
+				Password: viper.GetString("sysmon.redis.password"),
+			}),
+			Key: viper.GetString("sysmon.redis.key"),
+		},
 		Handler: shards.Handler(),
+		ConfigStreamWorkers: processing.ConfigStreamWorkers{
+			Name:    "consume sysmon",
+			Workers: viper.GetInt("workers.sysmon.consume"),
+			Pool:    pool,
+			Ctx:     poolCtx,
+			Logger:  log,
+		},
 	}); err != nil {
 		log.Fatal(err)
 	}
