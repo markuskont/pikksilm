@@ -40,8 +40,7 @@ func ConsumeSysmonEvents(c SysmonConsumeConfig) error {
 
 		c.Pool.Go(func() error {
 			lctx := c.Logger.
-				WithField("worker", worker).
-				WithField("task", "consume")
+				WithField("worker", worker)
 
 			lctx.Info("worker setting up")
 		loop:
@@ -186,7 +185,7 @@ func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
 					// periodic command dump
 					correlateWriteDump(c, lctx, worker, winlog.buckets.commands.Buckets)
 				case <-report.C:
-					lctx.WithFields(winlog.Stats.fields()).Info("stream report")
+					lctx.WithFields(winlog.Stats.fields()).Info("sysmpn correlation report")
 				case entry, ok := <-ch:
 					if !ok {
 						break loop
