@@ -15,9 +15,12 @@ type DataMapShards struct {
 	Len      uint64
 }
 
-func (s *DataMapShards) Handler() MapHandlerFunc {
+func (s *DataMapShards) Handler(balanceKey ...string) (MapHandlerFunc, error) {
+	if len(balanceKey) == 0 {
+		return nil, errors.New("shard balancer handler missing balance key")
+	}
 	return func(m datamodels.Map) {
-		entityID, ok := m.GetString("process", "entity_id")
+		entityID, ok := m.GetString(balanceKey...)
 		if ok {
 			select {
 			case s.Channels[balanceString(entityID, s.Len)] <- m:
@@ -25,7 +28,7 @@ func (s *DataMapShards) Handler() MapHandlerFunc {
 				return
 			}
 		}
-	}
+	}, nil
 }
 
 func NewDataMapShards(ctx context.Context, workers int) (*DataMapShards, error) {

@@ -32,11 +32,11 @@ func run(cmd *cobra.Command, args []string) {
 		return nil
 	})
 
-	shards, err := processing.NewDataMapShards(poolCtx, viper.GetInt("workers.sysmon.correlate"))
+	shardsSysmon, err := processing.NewDataMapShards(poolCtx, viper.GetInt("workers.sysmon.correlate"))
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer shards.Close()
+	defer shardsSysmon.Close()
 
 	wiseCorrelationCh := make(chan processing.EncodedEntry)
 	defer close(wiseCorrelationCh)
@@ -74,7 +74,7 @@ func run(cmd *cobra.Command, args []string) {
 			Ctx:     poolCtx,
 			Logger:  log,
 		},
-		Shards:          shards,
+		Shards:          shardsSysmon,
 		LogCorrelations: viper.GetBool("general.log.correlations"),
 		WinlogConfig: processing.WinlogConfig{
 			StoreNetEvents:       true,
@@ -97,6 +97,10 @@ func run(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 
+	balancerSysmon, err := shardsSysmon.Handler("process", "entity_id")
+	if err != nil {
+		log.Fatal(err)
+	}
 	if err := processing.ConsumeRedis(processing.ConfigConsumeRedis{
 		ConfigStreamRedis: processing.ConfigStreamRedis{
 			Client: redis.NewClient(&redis.Options{
@@ -106,7 +110,7 @@ func run(cmd *cobra.Command, args []string) {
 			}),
 			Key: viper.GetString("sysmon.redis.key"),
 		},
-		Handler: shards.Handler(),
+		Handler: balancerSysmon,
 		ConfigStreamWorkers: processing.ConfigStreamWorkers{
 			Name:    "consume sysmon",
 			Workers: viper.GetInt("workers.sysmon.consume"),
