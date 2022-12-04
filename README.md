@@ -240,7 +240,7 @@ INFO[38370] stream report                                 cmd_bucket_moves=0 cou
 
 ### Suricata
 
-**Coming soon**. Suricata EVE enrichment is supported in backend. However, unlike Arkime which can be enriched through WISE, Suricata events need to be streamed through pikksilm. This was implemented in initial prototype but the feature has not yet been reworked for new multi-worker setup. Stay posted or use a older version from Releases. Do note that older versions use different configuration syntax that does not reflect this documentation.
+Suricata EVE events need to be streamed through pikksilm. Only redis input is supported currently. Events will then be pushed back to another redis queue on the same redis server, whether enrichment succeeded or not. Refer to `suricata` section in config to see the options.
 
 ### Systemd service
 
