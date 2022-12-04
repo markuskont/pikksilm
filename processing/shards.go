@@ -10,9 +10,11 @@ import (
 type MapHandlerFunc func(datamodels.Map)
 
 type DataMapShards struct {
-	Channels []chan datamodels.Map
-	Ctx      context.Context
-	Len      uint64
+	Name            string
+	Channels        []chan datamodels.Map
+	Ctx             context.Context
+	Len             uint64
+	CountMissingKey uint64
 }
 
 func (s *DataMapShards) Handler(balanceKey ...string) (MapHandlerFunc, error) {
@@ -21,17 +23,18 @@ func (s *DataMapShards) Handler(balanceKey ...string) (MapHandlerFunc, error) {
 	}
 	return func(m datamodels.Map) {
 		entityID, ok := m.GetString(balanceKey...)
-		if ok {
-			select {
-			case s.Channels[balanceString(entityID, s.Len)] <- m:
-			case <-s.Ctx.Done():
-				return
-			}
+		if !ok {
+			return
+		}
+		select {
+		case s.Channels[balanceString(entityID, s.Len)] <- m:
+		case <-s.Ctx.Done():
+			return
 		}
 	}, nil
 }
 
-func NewDataMapShards(ctx context.Context, workers int) (*DataMapShards, error) {
+func NewDataMapShards(ctx context.Context, workers int, name string) (*DataMapShards, error) {
 	if workers < 1 {
 		return nil, errors.New("invalid worker count for shard init")
 	}
@@ -41,6 +44,7 @@ func NewDataMapShards(ctx context.Context, workers int) (*DataMapShards, error) 
 		shards[i] = ch
 	}
 	return &DataMapShards{
+		Name:     name,
 		Ctx:      ctx,
 		Channels: shards,
 		Len:      uint64(len(shards)),

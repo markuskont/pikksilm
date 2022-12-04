@@ -10,11 +10,17 @@ import (
 	"github.com/markuskont/datamodels"
 )
 
-type bucketHandlerFunc func(*Bucket) error
-type containerCreateFunc func() any
+type (
+	// TODO - add a bool return type to stop lookups on match
+	// should be optional
+	bucketHandlerFunc   func(*Bucket) error
+	containerCreateFunc func() any
+)
 
-type entries []datamodels.Map
-type networkEvents []networkEntry
+type (
+	entries       []datamodels.Map
+	networkEvents []networkEntry
+)
 
 type CommandEvents map[string]datamodels.Map
 

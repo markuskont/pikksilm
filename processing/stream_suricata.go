@@ -15,8 +15,8 @@ type SuricataCorrelateConfig struct {
 	ConfigStreamWorkers
 	Output ConfigStreamRedis
 
-	InputEventShards *DataMapShards
-	Correlations     *SafeCorrelationEventMap
+	InputEventShards      *DataMapShards
+	CorrelatedEventShards *DataMapShards
 }
 
 func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
@@ -27,13 +27,17 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 		return err
 	}
 	if c.InputEventShards == nil {
-		return errors.New("missing shard config")
+		return errors.New("suricata - missing event shards")
 	}
 	if len(c.InputEventShards.Channels) != c.Workers {
-		return errors.New("worker count does not match channels")
+		return errors.New("suricata - worker count does not match event channels")
 	}
-	if c.Correlations == nil {
-		return errors.New("suricata correlator requires sysmon result map")
+
+	if c.CorrelatedEventShards == nil {
+		return errors.New("suricata - missing event shards")
+	}
+	if len(c.InputEventShards.Channels) != c.Workers {
+		return errors.New("suricata - worker count does not match event channels")
 	}
 
 	if err := waitOnRedis(c.Ctx, c.Output.Client, c.Logger); err != nil {
@@ -48,9 +52,14 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 				WithField("stream", "suricata")
 			lctx.Info("worker setting up")
 
-			ch := c.InputEventShards.Channels[worker]
-			if ch == nil {
-				return errors.New("empty shard")
+			chEvents := c.InputEventShards.Channels[worker]
+			if chEvents == nil {
+				return errors.New("empty shard - events")
+			}
+
+			chCorrelations := c.CorrelatedEventShards.Channels[worker]
+			if chCorrelations == nil {
+				return errors.New("empty shard - correlations")
 			}
 
 			cid, err := gommunityid.GetCommunityIDByVersion(1, 0)
@@ -64,15 +73,47 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 			var (
 				countEvents         int
 				countNoFiveTuple    int
+				countNoCID          int
 				countErrCommunityID int
 				countErrMarshalJSON int
 				countSuccess        int
+				countCorrelations   int
+				countCorrPickup     int
 			)
+
+			buckets, err := newBuckets(bucketsConfig{
+				BucketsConfig: BucketsConfig{
+					Count: 4,
+					Size:  300 * time.Second,
+				},
+				containerCreateFunc: func() any { return make(map[string]datamodels.Map) },
+			})
+			if err != nil {
+				return err
+			}
 
 		loop:
 			for {
 				select {
-				case eve, ok := <-ch:
+				case corr, ok := <-chCorrelations:
+					if !ok {
+						break loop
+					}
+					countCorrPickup++
+					buckets.InsertCurrent(func(b *Bucket) error {
+						container, ok := b.Data.(map[string]datamodels.Map)
+						if !ok {
+							return errors.New("suricata - invalid bucket data type, expected a map")
+						}
+						cid, ok := corr.GetString("network", "community_id")
+						if !ok {
+							countNoCID++
+							return nil
+						}
+						container[cid] = corr
+						return nil
+					})
+				case eve, ok := <-chEvents:
 					if !ok {
 						break loop
 					}
@@ -90,12 +131,22 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 							continue loop
 						}
 					}
-					correlation, ok := c.Correlations.Lookup(id)
-					if ok {
-						// FIXME - naive approach, no bucketing to delay events
-						eve.Set(correlation, "edr")
-						countSuccess++
-					}
+
+					countCorrelations = 0
+					buckets.Check(func(b *Bucket) error {
+						container, ok := b.Data.(map[string]datamodels.Map)
+						if !ok {
+							return errors.New("suricata - invalid bucket data type, expected a map")
+						}
+						countCorrelations += len(container)
+						correlation, ok := container[id]
+						if ok {
+							eve.Set(correlation, "edr")
+							countSuccess++
+						}
+						return nil
+					})
+
 					encoded, err := json.Marshal(eve)
 					if err != nil {
 						countErrMarshalJSON++
@@ -111,9 +162,11 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 						WithField("count_total", countEvents).
 						WithField("count_no_fivetuple", countNoFiveTuple).
 						WithField("count_cid_err", countErrCommunityID).
+						WithField("count_no_cid", countNoCID).
 						WithField("count_marshal_json_err", countErrMarshalJSON).
 						WithField("count_success", countSuccess).
-						WithField("count_correlations", c.Correlations.Len()).
+						WithField("count_correlations", countCorrelations).
+						WithField("count_correlations_pickup", countCorrPickup).
 						Info("suricata correlation report")
 				}
 			}

@@ -18,6 +18,7 @@ type winlogStats struct {
 	Count           int
 	CountCommand    int
 	CountNetwork    int
+	CountCorrFwd    int
 	InvalidEvent    int
 	MissingGUID     int
 	MissingEventID  int
@@ -31,6 +32,7 @@ func (ws winlogStats) fields() map[string]any {
 		"count":             ws.Count,
 		"count_command":     ws.CountCommand,
 		"count_network":     ws.CountNetwork,
+		"count_corr_fwd":    ws.CountCorrFwd,
 		"net_events_stored": ws.NetEventsStored,
 		"net_events_popped": ws.NetEventsPopped,
 		"cmd_bucket_moves":  ws.CmdBucketMoves,
@@ -55,7 +57,8 @@ type Winlog struct {
 
 	buckets *winlogBuckets
 
-	Results *SafeCorrelationEventMap
+	// ResultHandler assigns resulting correlations to correct suricata worker
+	ResultHandler MapHandlerFunc
 
 	// weather to keep network events in buckets or not
 	// for potential out of order messages, is memory intentsive
@@ -63,10 +66,6 @@ type Winlog struct {
 
 	// emit network events that do not have positive correlation
 	forwardNetEvents bool
-
-	// store correlation results in thread safe map
-	// needed for Suricata streaming
-	storeSafeResults bool
 
 	Stats winlogStats
 }
@@ -216,8 +215,11 @@ func (c *Winlog) sendCorrelated(e datamodels.Map, key string) error {
 		return err
 	}
 	c.chCorrelated <- EncodedEntry{Entry: data, Key: key}
-	if c.storeSafeResults && c.Results != nil {
-		c.Results.Insert(key, e)
+	if c.ResultHandler != nil {
+		dest := make(datamodels.Map)
+		deepCopyMap(e, dest)
+		c.ResultHandler(dest)
+		c.Stats.CountCorrFwd++
 	}
 	if c.writerCorrelate != nil {
 		if _, err := c.writerCorrelate.Write(append(data, []byte("\n")...)); err != nil {
@@ -249,8 +251,7 @@ type WinlogConfig struct {
 	ChanCorrelated       chan EncodedEntry
 	ChanOnlyNetwork      chan EncodedEntry
 	ForwardNetworkEvents bool
-	StoreSafeResults     bool
-	SafeResultMap        *SafeCorrelationEventMap
+	ResultHandler        MapHandlerFunc
 }
 
 func newWinlog(c WinlogConfig, cmdPersist []Bucket, corrWriter io.WriteCloser) (*Winlog, error) {
@@ -299,13 +300,7 @@ func newWinlog(c WinlogConfig, cmdPersist []Bucket, corrWriter io.WriteCloser) (
 		w.chOnlyNetwork = make(chan EncodedEntry)
 	}
 	w.forwardNetEvents = c.ForwardNetworkEvents
-
-	w.storeSafeResults = c.StoreSafeResults
-	if c.SafeResultMap != nil {
-		w.Results = c.SafeResultMap
-	} else {
-		w.Results = NewSafeConcurrentMap()
-	}
+	w.ResultHandler = c.ResultHandler
 
 	return w, nil
 }

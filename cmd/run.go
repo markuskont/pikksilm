@@ -32,7 +32,11 @@ func run(cmd *cobra.Command, args []string) {
 		return nil
 	})
 
-	shardsSysmon, err := processing.NewDataMapShards(poolCtx, viper.GetInt("workers.sysmon.correlate"))
+	shardsSysmon, err := processing.NewDataMapShards(
+		poolCtx,
+		viper.GetInt("workers.sysmon.correlate"),
+		"sysmon events",
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -66,7 +70,15 @@ func run(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 
-	safeResultMap := processing.NewSafeConcurrentMap()
+	shardsCorrelations, err := processing.NewDataMapShards(
+		poolCtx,
+		viper.GetInt("workers.suricata.correlate"),
+		"correlations to suricata",
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer shardsCorrelations.Close()
 
 	if err := processing.CorrelateSysmonEvents(processing.SysmonCorrelateConfig{
 		ConfigStreamWorkers: processing.ConfigStreamWorkers{
@@ -94,8 +106,16 @@ func run(cmd *cobra.Command, args []string) {
 					Size:  viper.GetDuration("sysmon.buckets.connection.duration"),
 				},
 			},
-			StoreSafeResults: viper.GetBool("suricata.enabled"),
-			SafeResultMap:    safeResultMap,
+			ResultHandler: func() processing.MapHandlerFunc {
+				if !viper.GetBool("suricata.enabled") {
+					return nil
+				}
+				balancerCorrelations, err := shardsCorrelations.Handler("network", "community_id")
+				if err != nil {
+					log.Fatal(err)
+				}
+				return balancerCorrelations
+			}(),
 		},
 	}); err != nil {
 		log.Fatal(err)
@@ -127,7 +147,11 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	if viper.GetBool("suricata.enabled") {
-		shardsSuricata, err := processing.NewDataMapShards(poolCtx, viper.GetInt("workers.suricata.correlate"))
+		shardsSuricata, err := processing.NewDataMapShards(
+			poolCtx,
+			viper.GetInt("workers.suricata.correlate"),
+			"suricata events",
+		)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -141,8 +165,8 @@ func run(cmd *cobra.Command, args []string) {
 				Ctx:     poolCtx,
 				Logger:  log,
 			},
-			Correlations:     safeResultMap,
-			InputEventShards: shardsSuricata,
+			InputEventShards:      shardsSuricata,
+			CorrelatedEventShards: shardsCorrelations,
 			Output: processing.ConfigStreamRedis{
 				Client: redis.NewClient(&redis.Options{
 					Addr:     viper.GetString("suricata.redis.host"),
