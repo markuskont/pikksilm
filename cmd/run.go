@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -147,61 +148,67 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	if viper.GetBool("suricata.enabled") {
-		shardsSuricata, err := processing.NewDataMapShards(
-			poolCtx,
-			viper.GetInt("workers.suricata.correlate"),
-			"suricata events",
-		)
-		if err != nil {
-			log.Fatal(err)
+		keys := viper.GetStringSlice("suricata.redis.key.input")
+		if len(keys) == 0 {
+			log.Fatal("Suricata redis key missing")
 		}
-		defer shardsSuricata.Close()
+		for _, keyInput := range keys {
+			shardsSuricata, err := processing.NewDataMapShards(
+				poolCtx,
+				viper.GetInt("workers.suricata.correlate"),
+				fmt.Sprintf("suricata events - %s", keyInput),
+			)
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer shardsSuricata.Close()
 
-		if err := processing.CorrelateSuricataEvents(processing.SuricataCorrelateConfig{
-			ConfigStreamWorkers: processing.ConfigStreamWorkers{
-				Name:    "correlate suricata",
-				Workers: viper.GetInt("workers.suricata.correlate"),
-				Pool:    pool,
-				Ctx:     poolCtx,
-				Logger:  log,
-			},
-			InputEventShards:      shardsSuricata,
-			CorrelatedEventShards: shardsCorrelations,
-			Output: processing.ConfigStreamRedis{
-				Client: redis.NewClient(&redis.Options{
-					Addr:     viper.GetString("suricata.redis.host"),
-					DB:       viper.GetInt("suricata.redis.db"),
-					Password: viper.GetString("suricata.redis.password"),
-				}),
-				Key: viper.GetString("suricata.redis.key.output"),
-			},
-		}); err != nil {
-			log.Fatal(err)
-		}
+			if err := processing.CorrelateSuricataEvents(processing.SuricataCorrelateConfig{
+				ConfigStreamWorkers: processing.ConfigStreamWorkers{
+					Name:    "correlate suricata",
+					Workers: viper.GetInt("workers.suricata.correlate"),
+					Pool:    pool,
+					Ctx:     poolCtx,
+					Logger:  log,
+				},
+				InputEventShards:      shardsSuricata,
+				CorrelatedEventShards: shardsCorrelations,
+				Output: processing.ConfigStreamRedis{
+					Client: redis.NewClient(&redis.Options{
+						Addr:     viper.GetString("suricata.redis.host"),
+						DB:       viper.GetInt("suricata.redis.db"),
+						Password: viper.GetString("suricata.redis.password"),
+					}),
+					Key: keyInput + "_" + viper.GetString("suricata.redis.key.output_suffix"),
+				},
+			}); err != nil {
+				log.Fatal(err)
+			}
 
-		balancerSuricata, err := shardsSuricata.Handler("community_id")
-		if err != nil {
-			log.Fatal(err)
-		}
-		if err := processing.ConsumeRedis(processing.ConfigConsumeRedis{
-			ConfigStreamRedis: processing.ConfigStreamRedis{
-				Client: redis.NewClient(&redis.Options{
-					Addr:     viper.GetString("suricata.redis.host"),
-					DB:       viper.GetInt("suricata.redis.db"),
-					Password: viper.GetString("suricata.redis.password"),
-				}),
-				Key: viper.GetString("suricata.redis.key.input"),
-			},
-			Handler: balancerSuricata,
-			ConfigStreamWorkers: processing.ConfigStreamWorkers{
-				Name:    "consume suricata",
-				Workers: viper.GetInt("workers.suricata.consume"),
-				Pool:    pool,
-				Ctx:     poolCtx,
-				Logger:  log,
-			},
-		}); err != nil {
-			log.Fatal(err)
+			balancerSuricata, err := shardsSuricata.Handler("community_id")
+			if err != nil {
+				log.Fatal(err)
+			}
+			if err := processing.ConsumeRedis(processing.ConfigConsumeRedis{
+				ConfigStreamRedis: processing.ConfigStreamRedis{
+					Client: redis.NewClient(&redis.Options{
+						Addr:     viper.GetString("suricata.redis.host"),
+						DB:       viper.GetInt("suricata.redis.db"),
+						Password: viper.GetString("suricata.redis.password"),
+					}),
+					Key: keyInput,
+				},
+				Handler: balancerSuricata,
+				ConfigStreamWorkers: processing.ConfigStreamWorkers{
+					Name:    "consume suricata",
+					Workers: viper.GetInt("workers.suricata.consume"),
+					Pool:    pool,
+					Ctx:     poolCtx,
+					Logger:  log,
+				},
+			}); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 
@@ -307,9 +314,9 @@ func init() {
 	pFlags.String("suricata-redis-password", "", "Password for EVE stream. Empty value disables authentication.")
 	viper.BindPFlag("suricata.redis.password", pFlags.Lookup("suricata-redis-password"))
 
-	pFlags.String("suricata-redis-key-input", "suricata", "Redis key for EVE stream.")
+	pFlags.StringSlice("suricata-redis-key-input", []string{"suricata"}, "Redis key for EVE stream.")
 	viper.BindPFlag("suricata.redis.key.input", pFlags.Lookup("suricata-redis-key-input"))
 
-	pFlags.String("suricata-redis-key-output", "suricata-edr", "Redis key for EVE stream.")
-	viper.BindPFlag("suricata.redis.key.output", pFlags.Lookup("suricata-redis-key-output"))
+	pFlags.String("suricata-redis-key-output-suffix", "edr", "Redis key for EVE stream.")
+	viper.BindPFlag("suricata.redis.key.output_suffix", pFlags.Lookup("suricata-redis-key-output-suffix"))
 }

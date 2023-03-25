@@ -40,7 +40,8 @@ func ConsumeRedis(c ConfigConsumeRedis) error {
 
 		c.Pool.Go(func() error {
 			lctx := c.Logger.
-				WithField("worker", worker)
+				WithField("worker", worker).
+				WithField("queue", c.Key)
 
 			lctx.Info("worker setting up")
 		loop:

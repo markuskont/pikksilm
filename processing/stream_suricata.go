@@ -49,7 +49,8 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 		c.Pool.Go(func() error {
 			lctx := c.Logger.
 				WithField("worker", worker).
-				WithField("stream", "suricata")
+				WithField("stream", "suricata").
+				WithField("queue", c.Output.Key)
 			lctx.Info("worker setting up")
 
 			chEvents := c.InputEventShards.Channels[worker]
