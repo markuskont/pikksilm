@@ -1,0 +1,37 @@
+---
+version: '3.8'
+
+volumes:
+  redis_data:
+  suricata_logs:
+  pikksilm_data:
+  go_postproc_persist:
+  sn_processing_logs:
+
+networks:
+  network:
+
+services:
+  redis:
+    image: redis
+    container_name: redis
+    restart: ${RESTART_MODE:-unless-stopped}
+    networks:
+      network:
+    ports:
+      - ${REDIS_PORT:-6379}:6379
+      
+  suricata:
+    build:
+      context: ./third_party/suricata/
+    image: pikksilm/suricata
+    container_name: suricata
+    restart: ${RESTART_MODE:-unless-stopped}
+    cap_add:
+      - NET_ADMIN
+      - SYS_NICE
+    network_mode: "host"
+    depends_on:
+      redis:
+        condition: service_started
+    command: "--af-packet=${CAPTURE_INTERFACE} --set outputs.1.eve-log.community-id=true --set outputs.1.eve-log.filetype=redis --set vars.address-groups.HOME_NET=\"[192.168.0.0/16,fe80::/96]\" -vvv"
