@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/markuskont/datamodels"
+	"github.com/sirupsen/logrus"
 )
 
 type ConfigConsumeRedis struct {
@@ -43,10 +44,21 @@ func ConsumeRedis(c ConfigConsumeRedis) error {
 				WithField("worker", worker).
 				WithField("queue", c.Key)
 
+			tick := time.NewTicker(5 * time.Second)
+			defer tick.Stop()
+
+			var count int
+
 			lctx.Info("worker setting up")
 		loop:
 			for {
 				select {
+				case <-tick.C:
+					lctx.WithFields(logrus.Fields{
+						"worker": worker,
+						"queue":  c.Key,
+						"count":  count,
+					}).Debug("redis consumer consumer")
 				case <-c.Ctx.Done():
 					lctx.Info("caught exit")
 					break loop
@@ -66,6 +78,7 @@ func ConsumeRedis(c ConfigConsumeRedis) error {
 						continue loop
 					}
 					c.Handler(e)
+					count++
 				}
 			}
 			return nil
