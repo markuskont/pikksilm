@@ -71,15 +71,20 @@ func run(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 
-	shardsCorrelations, err := processing.NewDataMapShards(
-		poolCtx,
-		viper.GetInt("workers.suricata.correlate"),
-		"correlations to suricata",
-	)
-	if err != nil {
-		log.Fatal(err)
+	keys := viper.GetStringSlice("suricata.redis.key.input")
+	suriShardsCorrelations := make([]*processing.DataMapShards, 0)
+	for _, key := range keys {
+		suriShard, err := processing.NewDataMapShards(
+			poolCtx,
+			viper.GetInt("workers.suricata.correlate"),
+			"correlations to suricata queue "+key,
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer suriShard.Close()
+		suriShardsCorrelations = append(suriShardsCorrelations, suriShard)
 	}
-	defer shardsCorrelations.Close()
 
 	if err := processing.CorrelateSysmonEvents(processing.SysmonCorrelateConfig{
 		ConfigStreamWorkers: processing.ConfigStreamWorkers{
@@ -107,15 +112,19 @@ func run(cmd *cobra.Command, args []string) {
 					Size:  viper.GetDuration("sysmon.buckets.connection.duration"),
 				},
 			},
-			SuricataHandler: func() processing.MapHandlerFunc {
-				if !viper.GetBool("suricata.enabled") {
+			SuricataHandler: func() []processing.MapHandlerFunc {
+				if len(suriShardsCorrelations) == 0 {
 					return nil
 				}
-				balancerCorrelations, err := shardsCorrelations.Handler("network", "community_id")
-				if err != nil {
-					log.Fatal(err)
+				handlers := make([]processing.MapHandlerFunc, 0)
+				for _, shard := range suriShardsCorrelations {
+					balancerCorrelations, err := shard.Handler("network", "community_id")
+					if err != nil {
+						log.Fatal(err)
+					}
+					handlers = append(handlers, balancerCorrelations)
 				}
-				return balancerCorrelations
+				return handlers
 			}(),
 		},
 	}); err != nil {
@@ -152,7 +161,7 @@ func run(cmd *cobra.Command, args []string) {
 		if len(keys) == 0 {
 			log.Fatal("Suricata redis key missing")
 		}
-		for _, keyInput := range keys {
+		for i, keyInput := range keys {
 			shardsSuricata, err := processing.NewDataMapShards(
 				poolCtx,
 				viper.GetInt("workers.suricata.correlate"),
@@ -172,7 +181,7 @@ func run(cmd *cobra.Command, args []string) {
 					Logger:  log,
 				},
 				InputEventShards:      shardsSuricata,
-				CorrelatedEventShards: shardsCorrelations,
+				CorrelatedEventShards: suriShardsCorrelations[i],
 				Output: processing.ConfigStreamRedis{
 					Client: redis.NewClient(&redis.Options{
 						Addr:     viper.GetString("suricata.redis.host"),
