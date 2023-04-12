@@ -44,7 +44,7 @@ func ConsumeRedis(c ConfigConsumeRedis) error {
 				WithField("worker", worker).
 				WithField("queue", c.Key)
 
-			tick := time.NewTicker(5 * time.Second)
+			tick := time.NewTicker(30 * time.Second)
 			defer tick.Stop()
 
 			var count int
