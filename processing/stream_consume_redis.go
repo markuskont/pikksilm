@@ -58,7 +58,7 @@ func ConsumeRedis(c ConfigConsumeRedis) error {
 						"worker": worker,
 						"queue":  c.Key,
 						"count":  count,
-					}).Debug("redis consumer consumer")
+					}).Debug("redis consumer")
 				case <-c.Ctx.Done():
 					lctx.Info("caught exit")
 					break loop
