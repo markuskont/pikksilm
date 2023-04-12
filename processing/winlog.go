@@ -57,8 +57,8 @@ type Winlog struct {
 
 	buckets *winlogBuckets
 
-	// ResultHandler assigns resulting correlations to correct suricata worker
-	ResultHandler MapHandlerFunc
+	// SuricataHandler assigns resulting correlations to correct suricata worker
+	SuricataHandler MapHandlerFunc
 
 	// weather to keep network events in buckets or not
 	// for potential out of order messages, is memory intentsive
@@ -215,10 +215,10 @@ func (c *Winlog) sendCorrelated(e datamodels.Map, key string) error {
 		return err
 	}
 	c.chCorrelated <- EncodedEntry{Entry: data, Key: key}
-	if c.ResultHandler != nil {
+	if c.SuricataHandler != nil {
 		dest := make(datamodels.Map)
 		deepCopyMap(e, dest)
-		c.ResultHandler(dest)
+		c.SuricataHandler(dest)
 		c.Stats.CountCorrFwd++
 	}
 	if c.writerCorrelate != nil {
@@ -251,7 +251,7 @@ type WinlogConfig struct {
 	ChanCorrelated       chan EncodedEntry
 	ChanOnlyNetwork      chan EncodedEntry
 	ForwardNetworkEvents bool
-	ResultHandler        MapHandlerFunc
+	SuricataHandler      MapHandlerFunc
 }
 
 func newWinlog(c WinlogConfig, cmdPersist []Bucket, corrWriter io.WriteCloser) (*Winlog, error) {
@@ -300,7 +300,7 @@ func newWinlog(c WinlogConfig, cmdPersist []Bucket, corrWriter io.WriteCloser) (
 		w.chOnlyNetwork = make(chan EncodedEntry)
 	}
 	w.forwardNetEvents = c.ForwardNetworkEvents
-	w.ResultHandler = c.ResultHandler
+	w.SuricataHandler = c.SuricataHandler
 
 	return w, nil
 }

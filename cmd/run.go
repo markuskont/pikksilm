@@ -107,7 +107,7 @@ func run(cmd *cobra.Command, args []string) {
 					Size:  viper.GetDuration("sysmon.buckets.connection.duration"),
 				},
 			},
-			ResultHandler: func() processing.MapHandlerFunc {
+			SuricataHandler: func() processing.MapHandlerFunc {
 				if !viper.GetBool("suricata.enabled") {
 					return nil
 				}
