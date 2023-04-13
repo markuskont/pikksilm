@@ -81,6 +81,7 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 				countCorrPickup     int
 				countTypeMismatch   int
 				countBucketRotates  int
+				countSkippedFlow    int
 			)
 
 			bucketsCorr, err := newBuckets(bucketsConfig{
@@ -131,6 +132,17 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 					if !ok {
 						break loop
 					}
+					if eventType, ok := eve.GetString("event_type"); ok && eventType == "flow" {
+						encoded, err := json.Marshal(eve.Raw())
+						if err != nil {
+							countErrMarshalJSON++
+							continue loop
+						}
+						c.Output.Client.LPush(context.TODO(), c.Output.Key, encoded)
+						countSkippedFlow++
+						continue loop
+					}
+
 					countEvents++
 					id, ok := eve.GetString("community_id")
 					if !ok {
@@ -201,6 +213,7 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 						WithField("count_correlations_pickup", countCorrPickup).
 						WithField("count_bucket_err_type_lookup", countTypeMismatch).
 						WithField("count_bucket_rotates", countBucketRotates).
+						WithField("count_skipped_flow", countSkippedFlow).
 						Info("suricata correlation report")
 				}
 			}
