@@ -27,9 +27,8 @@ func CorrelateSysmonEvents(c SysmonCorrelateConfig) error {
 	if len(c.Shards.Channels) != c.Workers {
 		return errors.New("worker count does not match channels")
 	}
-	var persist bool
+	persist := false
 	if dir := c.WinlogConfig.WorkDir; dir != "" {
-		persist = true
 		pth := path.Join(dir, "correlate.json")
 		if !dumpNotExists(pth) {
 			f, err := os.Open(pth)
