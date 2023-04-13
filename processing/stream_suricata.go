@@ -80,14 +80,26 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 				countSuccess        int
 				countCorrPickup     int
 				countTypeMismatch   int
+				countBucketRotates  int
 			)
 
-			buckets, err := newBuckets(bucketsConfig{
+			bucketsCorr, err := newBuckets(bucketsConfig{
 				BucketsConfig: BucketsConfig{
 					Count: 4,
 					Size:  300 * time.Second,
 				},
 				containerCreateFunc: func() any { return make(map[string]*datamodels.SafeMap) },
+			})
+			if err != nil {
+				return err
+			}
+
+			bucketsEve, err := newBuckets(bucketsConfig{
+				BucketsConfig: BucketsConfig{
+					Count: 4,
+					Size:  2 * time.Second,
+				},
+				containerCreateFunc: func() any { return make([]*datamodels.SafeMap, 0) },
 			})
 			if err != nil {
 				return err
@@ -101,7 +113,7 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 						break loop
 					}
 					countCorrPickup++
-					buckets.InsertCurrent(func(b *Bucket) error {
+					bucketsCorr.InsertCurrent(func(b *Bucket) error {
 						container, ok := b.Data.(map[string]*datamodels.SafeMap)
 						if !ok {
 							return errors.New("suricata - invalid bucket data type, expected a map")
@@ -134,27 +146,46 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 						}
 					}
 
-					if err := buckets.Check(func(b *Bucket) error {
-						container, ok := b.Data.(map[string]*datamodels.SafeMap)
+					val, err := bucketsEve.InsertCurrentAndGetVal(func(b *Bucket) error {
+						container, ok := b.Data.([]*datamodels.SafeMap)
 						if !ok {
 							return errors.New("suricata - invalid bucket data type, expected a map")
 						}
-						correlation, ok := container[id]
-						if ok {
-							eve.Set(correlation.Raw(), "edr")
-							countSuccess++
-						}
+						b.Data = append(container, eve)
 						return nil
-					}); err != nil {
-						countTypeMismatch++
-					}
-
-					encoded, err := json.Marshal(eve.Raw())
+					})
 					if err != nil {
-						countErrMarshalJSON++
-						continue loop
+						return errors.New("invalid EVE bucket - event insertion")
+					} else if val != nil {
+						countBucketRotates++
+						container, ok := val.Data.([]*datamodels.SafeMap)
+						if !ok {
+							return errors.New("invalid rotated EVE bucket")
+						}
+						for _, event := range container {
+							if err := bucketsCorr.Check(func(b *Bucket) error {
+								container, ok := b.Data.(map[string]*datamodels.SafeMap)
+								if !ok {
+									return errors.New("suricata - invalid bucket data type, expected a map")
+								}
+								correlation, ok := container[id]
+								if ok {
+									event.Set(correlation.Raw(), "edr")
+									countSuccess++
+								}
+								return nil
+							}); err != nil {
+								countTypeMismatch++
+							}
+
+							encoded, err := json.Marshal(event.Raw())
+							if err != nil {
+								countErrMarshalJSON++
+								continue loop
+							}
+							c.Output.Client.LPush(context.TODO(), c.Output.Key, encoded)
+						}
 					}
-					c.Output.Client.LPush(context.TODO(), c.Output.Key, encoded)
 
 				case <-c.Ctx.Done():
 					lctx.Info("caught exit")
@@ -169,6 +200,7 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 						WithField("count_success", countSuccess).
 						WithField("count_correlations_pickup", countCorrPickup).
 						WithField("count_bucket_err_type_lookup", countTypeMismatch).
+						WithField("count_bucket_rotates", countBucketRotates).
 						Info("suricata correlation report")
 				}
 			}
