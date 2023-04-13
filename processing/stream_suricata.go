@@ -81,7 +81,7 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 			bucketsCorr, err := newBuckets(bucketsConfig{
 				BucketsConfig: BucketsConfig{
 					Count: 4,
-					Size:  300 * time.Second,
+					Size:  180 * time.Second,
 				},
 				containerCreateFunc: func() any { return make(map[string]*datamodels.SafeMap) },
 			})
