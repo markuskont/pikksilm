@@ -192,7 +192,7 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 					break loop
 				case <-report.C:
 					lctx.
-						WithField("count_total", countEvents).
+						WithField("count_events", countEvents).
 						WithField("count_no_fivetuple", countNoFiveTuple).
 						WithField("count_cid_err", countErrCommunityID).
 						WithField("count_no_cid", countNoCID).
