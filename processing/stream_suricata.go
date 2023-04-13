@@ -87,7 +87,7 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 					Count: 4,
 					Size:  300 * time.Second,
 				},
-				containerCreateFunc: func() any { return make(map[string]datamodels.Map) },
+				containerCreateFunc: func() any { return make(map[string]datamodels.SafeMap) },
 			})
 			if err != nil {
 				return err
@@ -102,10 +102,11 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 					}
 					countCorrPickup++
 					buckets.InsertCurrent(func(b *Bucket) error {
-						container, ok := b.Data.(map[string]datamodels.Map)
+						container, ok := b.Data.(map[string]*datamodels.SafeMap)
 						if !ok {
 							return errors.New("suricata - invalid bucket data type, expected a map")
 						}
+						// FIXME - data race here
 						cid, ok := corr.GetString("network", "community_id")
 						if !ok {
 							countNoCID++
@@ -230,7 +231,7 @@ func deepCopyMap(src map[string]any, dest map[string]any) {
 	}
 }
 
-func getNetworkEntry(eve datamodels.Map) *networkEntry {
+func getNetworkEntry(eve *datamodels.SafeMap) *networkEntry {
 	proto, ok := eve.GetString("proto")
 	if !ok {
 		return nil

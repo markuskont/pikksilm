@@ -98,7 +98,7 @@ func extractNetworkEntryBase(e datamodels.Map, guid string) (*networkEntry, erro
 	}, nil
 }
 
-func extractNetworkEntryECS(e datamodels.Map, guid string) (*networkEntry, error) {
+func extractNetworkEntryECS(e *datamodels.SafeMap, guid string) (*networkEntry, error) {
 	proto, ok := e.GetString("network", "transport")
 	if !ok {
 		return nil, errors.New("missing transport")

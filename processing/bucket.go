@@ -18,11 +18,11 @@ type (
 )
 
 type (
-	entries       []datamodels.Map
+	entries       []datamodels.SafeMap
 	networkEvents []networkEntry
 )
 
-type CommandEvents map[string]datamodels.Map
+type CommandEvents map[string]*datamodels.SafeMap
 
 func newEntries() any { return make(entries, 0) }
 
@@ -171,7 +171,8 @@ func castConcreteCmdEvents(buckets []Bucket) {
 		if cmd, ok := val.Data.(map[string]any); ok {
 			for k, v := range cmd {
 				if entry, ok := v.(map[string]any); ok {
-					concrete[k] = datamodels.Map(entry)
+					m := datamodels.Map(entry)
+					concrete[k] = datamodels.NewSafeMap(m)
 				}
 			}
 		}

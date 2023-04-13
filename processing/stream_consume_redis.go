@@ -77,7 +77,7 @@ func ConsumeRedis(c ConfigConsumeRedis) error {
 						lctx.Error(err)
 						continue loop
 					}
-					c.Handler(e)
+					c.Handler(datamodels.NewSafeMap(e))
 					count++
 				}
 			}

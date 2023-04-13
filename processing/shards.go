@@ -7,11 +7,11 @@ import (
 	"github.com/markuskont/datamodels"
 )
 
-type MapHandlerFunc func(datamodels.Map)
+type MapHandlerFunc func(*datamodels.SafeMap)
 
 type DataMapShards struct {
 	Name            string
-	Channels        []chan datamodels.Map
+	Channels        []chan *datamodels.SafeMap
 	Ctx             context.Context
 	Len             uint64
 	CountMissingKey uint64
@@ -21,7 +21,7 @@ func (s *DataMapShards) Handler(balanceKey ...string) (MapHandlerFunc, error) {
 	if len(balanceKey) == 0 {
 		return nil, errors.New("shard balancer handler missing balance key")
 	}
-	return func(m datamodels.Map) {
+	return func(m *datamodels.SafeMap) {
 		entityID, ok := m.GetString(balanceKey...)
 		if !ok {
 			return
@@ -38,9 +38,9 @@ func NewDataMapShards(ctx context.Context, workers int, name string) (*DataMapSh
 	if workers < 1 {
 		return nil, errors.New("invalid worker count for shard init")
 	}
-	shards := make([]chan datamodels.Map, workers)
+	shards := make([]chan *datamodels.SafeMap, workers)
 	for i := range shards {
-		ch := make(chan datamodels.Map)
+		ch := make(chan *datamodels.SafeMap)
 		shards[i] = ch
 	}
 	return &DataMapShards{

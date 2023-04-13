@@ -79,7 +79,7 @@ func (c *Winlog) Close() error {
 
 func (c Winlog) CmdLen() int { return len(c.buckets.commands.Buckets) }
 
-func (c *Winlog) Process(e datamodels.Map) error {
+func (c *Winlog) Process(e *datamodels.SafeMap) error {
 	entityID, ok := e.GetString("process", "entity_id")
 	if !ok {
 		c.Stats.MissingGUID++
@@ -90,7 +90,7 @@ func (c *Winlog) Process(e datamodels.Map) error {
 		c.Stats.MissingEventID++
 		return ErrInvalidEvent{
 			Key: "winlog.event_id",
-			Raw: e,
+			Raw: e.Raw(),
 		}
 	}
 	c.Stats.Count++
@@ -118,6 +118,7 @@ func (c *Winlog) Process(e datamodels.Map) error {
 			if !ok {
 				return nil
 			}
+			// FIXME - race here
 			command.Set(id, "network", "community_id")
 			c.sendCorrelated(command, id)
 			found = true
@@ -193,6 +194,7 @@ func (c *Winlog) Process(e datamodels.Map) error {
 							return err
 						}
 						c.Stats.NetEventsPopped++
+						// FIXME - race here
 						e.Set(id, "network", "community_id")
 						// TODO - handle potential error
 						c.sendCorrelated(e, id)
@@ -208,30 +210,29 @@ func (c *Winlog) Process(e datamodels.Map) error {
 	return nil
 }
 
-func (c *Winlog) sendCorrelated(e datamodels.Map, key string) error {
+func (c *Winlog) sendCorrelated(e *datamodels.SafeMap, key string) error {
 	c.Stats.Enriched++
 	data, err := json.Marshal(e)
 	if err != nil {
 		return err
 	}
 	c.chCorrelated <- EncodedEntry{Entry: data, Key: key}
-	if c.SuricataHandler != nil {
-		for _, handler := range c.SuricataHandler {
-			dest := make(datamodels.Map)
-			deepCopyMap(e, dest)
-			handler(dest)
-		}
-		c.Stats.CountCorrFwd++
-	}
 	if c.writerCorrelate != nil {
 		if _, err := c.writerCorrelate.Write(append(data, []byte("\n")...)); err != nil {
 			return err
 		}
 	}
+
+	if c.SuricataHandler != nil {
+		for _, handler := range c.SuricataHandler {
+			handler(e)
+		}
+		c.Stats.CountCorrFwd++
+	}
 	return nil
 }
 
-func (c *Winlog) sendNetworkEvent(e datamodels.Map, key string) error {
+func (c *Winlog) sendNetworkEvent(e *datamodels.SafeMap, key string) error {
 	data, err := json.Marshal(e)
 	if err != nil {
 		return err
