@@ -72,16 +72,16 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 			defer report.Stop()
 
 			var (
-				countEvents         int
-				countNoFiveTuple    int
-				countNoCID          int
-				countErrCommunityID int
-				countErrMarshalJSON int
-				countSuccess        int
-				countCorrPickup     int
-				countTypeMismatch   int
-				countBucketRotates  int
-				countSkippedFlow    int
+				countEvents           int
+				countNoFiveTuple      int
+				countNoCID            int
+				countErrCommunityID   int
+				countErrMarshalJSON   int
+				countSuccess          int
+				countCorrPickup       int
+				countTypeMismatch     int
+				countBucketRotates    int
+				countSkippedEventType int
 			)
 
 			bucketsCorr, err := newBuckets(bucketsConfig{
@@ -104,6 +104,11 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 			})
 			if err != nil {
 				return err
+			}
+
+			ingoreEventTypes := map[string]bool{
+				"flow": true,
+				"dns":  true,
 			}
 
 		loop:
@@ -132,18 +137,18 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 					if !ok {
 						break loop
 					}
-					if eventType, ok := eve.GetString("event_type"); ok && eventType == "flow" {
+					countEvents++
+					if eventType, ok := eve.GetString("event_type"); ok && ingoreEventTypes[eventType] {
 						encoded, err := json.Marshal(eve.Raw())
 						if err != nil {
 							countErrMarshalJSON++
 							continue loop
 						}
 						c.Output.Client.LPush(context.TODO(), c.Output.Key, encoded)
-						countSkippedFlow++
+						countSkippedEventType++
 						continue loop
 					}
 
-					countEvents++
 					id, ok := eve.GetString("community_id")
 					if !ok {
 						ne := getNetworkEntry(eve)
@@ -213,7 +218,7 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 						WithField("count_correlations_pickup", countCorrPickup).
 						WithField("count_bucket_err_type_lookup", countTypeMismatch).
 						WithField("count_bucket_rotates", countBucketRotates).
-						WithField("count_skipped_flow", countSkippedFlow).
+						WithField("count_skipped_event_type", countSkippedEventType).
 						Info("suricata correlation report")
 				}
 			}
