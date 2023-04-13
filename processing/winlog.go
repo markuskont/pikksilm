@@ -212,7 +212,7 @@ func (c *Winlog) Process(e *datamodels.SafeMap) error {
 
 func (c *Winlog) sendCorrelated(e *datamodels.SafeMap, key string) error {
 	c.Stats.Enriched++
-	data, err := json.Marshal(e)
+	data, err := json.Marshal(e.Raw())
 	if err != nil {
 		return err
 	}
