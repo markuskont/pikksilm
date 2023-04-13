@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/markuskont/datamodels"
-	"github.com/satta/gommunityid"
 )
 
 type SuricataCorrelateConfig struct {
@@ -61,11 +60,6 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 			chCorrelations := c.CorrelatedEventShards.Channels[worker]
 			if chCorrelations == nil {
 				return errors.New("empty shard - correlations")
-			}
-
-			cid, err := gommunityid.GetCommunityIDByVersion(1, 0)
-			if err != nil {
-				return err
 			}
 
 			report := time.NewTicker(15 * time.Second)
@@ -149,20 +143,6 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 						continue loop
 					}
 
-					id, ok := eve.GetString("community_id")
-					if !ok {
-						ne := getNetworkEntry(eve)
-						if ne == nil {
-							countNoFiveTuple++
-							continue loop
-						}
-						id, err = ne.communityID(cid)
-						if err != nil {
-							countErrCommunityID++
-							continue loop
-						}
-					}
-
 					val, err := bucketsEve.InsertCurrentAndGetVal(func(b *Bucket) error {
 						container, ok := b.Data.([]*datamodels.SafeMap)
 						if !ok {
@@ -180,19 +160,24 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 							return errors.New("invalid rotated EVE bucket")
 						}
 						for _, event := range container {
-							if err := bucketsCorr.Check(func(b *Bucket) error {
-								container, ok := b.Data.(map[string]*datamodels.SafeMap)
-								if !ok {
-									return errors.New("suricata - invalid bucket data type, expected a map")
+							id, ok := event.GetString("community_id")
+							if ok {
+								if err := bucketsCorr.Check(func(b *Bucket) error {
+									container, ok := b.Data.(map[string]*datamodels.SafeMap)
+									if !ok {
+										return errors.New("suricata - invalid bucket data type, expected a map")
+									}
+									correlation, ok := container[id]
+									if ok {
+										event.Set(correlation.Raw(), "edr")
+										countSuccess++
+									}
+									return nil
+								}); err != nil {
+									countTypeMismatch++
 								}
-								correlation, ok := container[id]
-								if ok {
-									event.Set(correlation.Raw(), "edr")
-									countSuccess++
-								}
-								return nil
-							}); err != nil {
-								countTypeMismatch++
+							} else {
+								countErrCommunityID++
 							}
 
 							encoded, err := json.Marshal(event.Raw())
