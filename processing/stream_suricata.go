@@ -78,8 +78,8 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 				countErrCommunityID int
 				countErrMarshalJSON int
 				countSuccess        int
-				countCorrelations   int
 				countCorrPickup     int
+				countTypeMismatch   int
 			)
 
 			buckets, err := newBuckets(bucketsConfig{
@@ -87,7 +87,7 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 					Count: 4,
 					Size:  300 * time.Second,
 				},
-				containerCreateFunc: func() any { return make(map[string]datamodels.SafeMap) },
+				containerCreateFunc: func() any { return make(map[string]*datamodels.SafeMap) },
 			})
 			if err != nil {
 				return err
@@ -134,22 +134,22 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 						}
 					}
 
-					countCorrelations = 0
-					buckets.Check(func(b *Bucket) error {
-						container, ok := b.Data.(map[string]datamodels.Map)
+					if err := buckets.Check(func(b *Bucket) error {
+						container, ok := b.Data.(map[string]*datamodels.SafeMap)
 						if !ok {
 							return errors.New("suricata - invalid bucket data type, expected a map")
 						}
-						countCorrelations += len(container)
 						correlation, ok := container[id]
 						if ok {
-							eve.Set(correlation, "edr")
+							eve.Set(correlation.Raw(), "edr")
 							countSuccess++
 						}
 						return nil
-					})
+					}); err != nil {
+						countTypeMismatch++
+					}
 
-					encoded, err := json.Marshal(eve)
+					encoded, err := json.Marshal(eve.Raw())
 					if err != nil {
 						countErrMarshalJSON++
 						continue loop
@@ -167,8 +167,8 @@ func CorrelateSuricataEvents(c SuricataCorrelateConfig) error {
 						WithField("count_no_cid", countNoCID).
 						WithField("count_marshal_json_err", countErrMarshalJSON).
 						WithField("count_success", countSuccess).
-						WithField("count_correlations", countCorrelations).
 						WithField("count_correlations_pickup", countCorrPickup).
+						WithField("count_bucket_err_type_lookup", countTypeMismatch).
 						Info("suricata correlation report")
 				}
 			}
