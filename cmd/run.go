@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -188,7 +189,16 @@ func run(cmd *cobra.Command, args []string) {
 						DB:       viper.GetInt("suricata.redis.db"),
 						Password: viper.GetString("suricata.redis.password"),
 					}),
-					Key: keyInput + "_" + viper.GetString("suricata.redis.key.output_suffix"),
+					Key: func() string {
+						if suff := viper.GetString("suricata.redis.key.output_suffix"); suff != "" {
+							return keyInput + "_" + suff
+						}
+						if output := viper.GetString("suricata.redis.key.output"); output != "" {
+							return output
+						}
+						log.Fatal(errors.New("missing redis output key for suricata"))
+						return ""
+					}(),
 				},
 			}); err != nil {
 				log.Fatal(err)
@@ -326,6 +336,9 @@ func init() {
 	pFlags.StringSlice("suricata-redis-key-input", []string{"suricata"}, "Redis key for EVE stream.")
 	viper.BindPFlag("suricata.redis.key.input", pFlags.Lookup("suricata-redis-key-input"))
 
-	pFlags.String("suricata-redis-key-output-suffix", "edr", "Redis key for EVE stream.")
+	pFlags.String("suricata-redis-key-output", "suricata_edr", "Redis key for EVE stream.")
+	viper.BindPFlag("suricata.redis.key.output", pFlags.Lookup("suricata-redis-key-output"))
+
+	pFlags.String("suricata-redis-key-output-suffix", "", "Redis key for EVE stream.")
 	viper.BindPFlag("suricata.redis.key.output_suffix", pFlags.Lookup("suricata-redis-key-output-suffix"))
 }
