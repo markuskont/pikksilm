@@ -1,4 +1,4 @@
-FROM golang:1.18 AS Builder
+FROM golang:1.24 AS Builder
 
 RUN mkdir -p /src
 COPY . /src/
