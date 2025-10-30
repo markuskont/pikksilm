@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/markuskont/pikksilm/processing"
+	"github.com/markuskont/pikksilm/processing/v1"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/sync/errgroup"
