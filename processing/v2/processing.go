@@ -36,3 +36,23 @@ func (c ConfigWorkerPool) Validate() error {
 	}
 	return nil
 }
+
+type ConfigRedis struct {
+	// some producers like WISE use dynamic keys, so Key will be redundant
+	// but we still want to validate in other cases, so dynkey skips that check
+	DynKey   bool
+	Key      string
+	Addr     string
+	DB       int
+	Password string
+}
+
+func (c ConfigRedis) Validate() error {
+	if c.Addr == "" {
+		return errors.New("missing redis address")
+	}
+	if !c.DynKey && c.Key == "" {
+		return errors.New("missing redis key")
+	}
+	return nil
+}

@@ -12,25 +12,16 @@ import (
 type ConfigConsume struct {
 	ConfigWorkerPool
 
-	Redis struct {
-		Key      string
-		Addr     string
-		DB       int
-		Password string
-	}
-
-	TX HandleConsume
+	Redis ConfigRedis
+	TX    HandleConsume
 }
 
 func Consume(c ConfigConsume) error {
 	if err := c.Validate(); err != nil {
 		return fmt.Errorf("redis: %s", err)
 	}
-	if c.Redis.Addr == "" {
-		return errors.New("redis: missing address")
-	}
-	if c.Redis.Key == "" {
-		return errors.New("redis: missing redis key")
+	if err := c.Redis.Validate(); err != nil {
+		return fmt.Errorf("redis: %s", err)
 	}
 	if c.TX == nil {
 		return errors.New("redis: missing consume handler")

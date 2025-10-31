@@ -81,6 +81,20 @@ func run(cmd *cobra.Command, args []string) {
 		confSysmonProcess.Handers = append(confSysmonProcess.Handers, h.Func())
 	}
 
+	if viper.GetBool("wise.enabled") {
+		h, err := processing.NewWriterWISE(processing.ConfigRedis{
+			DynKey:   true,
+			Addr:     viper.GetString("wise.redis.host"),
+			DB:       viper.GetInt("wise.redis.db"),
+			Password: viper.GetString("wise.redis.password"),
+		})
+		if err != nil {
+			processing.Logger.Error(err.Error())
+			os.Exit(1)
+		}
+		confSysmonProcess.Handers = append(confSysmonProcess.Handers, h.Func())
+	}
+
 	if err := processing.WinlogProcess(*confSysmonProcess); err != nil {
 		processing.Logger.Error(err.Error())
 		os.Exit(1)
@@ -117,6 +131,10 @@ func init() {
 		"sysmon-buffer",
 		"sysmon-cache",
 		"output-file-correlations",
+		"wise-enabled",
+		"wise-redis-host",
+		"wise-redis-db",
+		"wise-redis-password",
 	}
 
 	pFlags.Duration("log-interval", 30*time.Second, "Periodic logging")
@@ -127,6 +145,11 @@ func init() {
 	pFlags.String("sysmon-redis-key", "winlogbeat", "Redis key for winlogbeat messages.")
 	pFlags.Int("sysmon-buffer", 1000, "Buffer size for internal message queue")
 	pFlags.Int("sysmon-cache", 1000000, "Cache size for processing sysmon streams")
+
+	pFlags.Bool("wise-enabled", false, "Push correlations to Arkime WISE via Redis")
+	pFlags.String("wise-redis-host", "localhost:6379", "Redis host to consume wise from.")
+	pFlags.Int("wise-redis-db", 1, "Redis database for wise consumer.")
+	pFlags.String("wise-redis-password", "", "Password for wise redis instance. Empty value disables authentication.")
 
 	pFlags.String("output-file-correlations", "", "Log file for sysmon correlations")
 

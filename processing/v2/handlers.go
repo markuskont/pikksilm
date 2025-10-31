@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"os"
+
+	"github.com/go-redis/redis/v8"
 )
 
 var newline = []byte("\n")
@@ -57,4 +59,33 @@ func NewWriterFile(path string) (*HandleOutputIO, error) {
 		return nil, err
 	}
 	return &HandleOutputIO{WriteCloser: f}, nil
+}
+
+type HandleOutputWise struct {
+	redis *redis.Client
+}
+
+func (h HandleOutputWise) Func() HandleWinlog {
+	return func(sce SysmonCoreECS) error {
+		encoded, err := json.Marshal(sce)
+		if err != nil {
+			return err
+		}
+		return h.
+			redis.
+			LPush(context.Background(), sce.Network.CommunityID, encoded).
+			Err()
+	}
+}
+
+func NewWriterWISE(c ConfigRedis) (*HandleOutputWise, error) {
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
+	return &HandleOutputWise{
+		redis: redis.NewClient(&redis.Options{
+			Addr:     c.Addr,
+			DB:       c.DB,
+			Password: c.Password,
+		})}, nil
 }
