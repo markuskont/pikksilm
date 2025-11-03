@@ -87,6 +87,7 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	if viper.GetBool("output.correlations.wise.enabled") {
+		processing.Logger.Debug("starting Arkime WISE handler")
 		h, err := processing.NewWriterWISE(processing.ConfigRedis{
 			DynKey:   true,
 			Addr:     viper.GetString("output.correlations.wise.redis.host"),
