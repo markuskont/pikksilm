@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
@@ -15,6 +16,10 @@ import (
 )
 
 func run(cmd *cobra.Command, args []string) {
+	if viper.GetBool("log.debug") {
+		processing.LogLevel.Set(slog.LevelDebug)
+	}
+
 	defer func() {
 		processing.Logger.Info("good exit")
 	}()
@@ -124,6 +129,7 @@ func init() {
 
 	register := []string{
 		"log-interval",
+		"log-debug",
 		"sysmon-redis-host",
 		"sysmon-redis-db",
 		"sysmon-redis-password",
@@ -138,6 +144,7 @@ func init() {
 	}
 
 	pFlags.Duration("log-interval", 30*time.Second, "Periodic logging")
+	pFlags.Bool("log-debug", false, "Increase logging verbosity")
 
 	pFlags.String("sysmon-redis-host", "localhost:6379", "Redis host to consume sysmon from.")
 	pFlags.Int("sysmon-redis-db", 0, "Redis database for sysmon consumer.")

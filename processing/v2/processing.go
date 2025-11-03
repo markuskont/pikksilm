@@ -13,9 +13,10 @@ import (
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-// FIXME: this needs to be configurable
+var LogLevel = new(slog.LevelVar)
+
 var Logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-	Level: slog.LevelDebug,
+	Level: LogLevel,
 }))
 
 type ConfigWorkerPool struct {
