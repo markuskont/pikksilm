@@ -86,6 +86,10 @@ func run(cmd *cobra.Command, args []string) {
 		confSysmonProcess.Handers = append(confSysmonProcess.Handers, h.Func())
 	}
 
+	if viper.GetBool("process.suricata.enabled") {
+		processing.Logger.Debug("streaming Suricata EVE")
+	}
+
 	if viper.GetBool("output.correlations.wise.enabled") {
 		processing.Logger.Debug("starting Arkime WISE handler")
 		h, err := processing.NewWriterWISE(processing.ConfigRedis{
@@ -135,6 +139,11 @@ func init() {
 		"input-sysmon-redis-db",
 		"input-sysmon-redis-password",
 		"input-sysmon-redis-key",
+		"input-suricata-redis-host",
+		"input-suricata-redis-db",
+		"input-suricata-redis-password",
+		"input-suricata-redis-key",
+		"process-suricata-enabled",
 		"process-sysmon-buffer",
 		"process-sysmon-cache",
 		"output-correlations-wise-enabled",
@@ -153,8 +162,14 @@ func init() {
 	pFlags.String("input-sysmon-redis-password", "", "Password for sysmon redis instance. Empty value disables authentication.")
 	pFlags.String("input-sysmon-redis-key", "winlogbeat", "Redis key for winlogbeat messages.")
 
+	pFlags.String("input-suricata-redis-host", "localhost:6379", "Redis host to consume suricata from.")
+	pFlags.Int("input-suricata-redis-db", 0, "Redis database for suricata consumer.")
+	pFlags.String("input-suricata-redis-password", "", "Password for suricata redis instance. Empty value disables authentication.")
+	pFlags.String("input-suricata-redis-key", "suricata", "Redis key for suricata messages.")
+
 	pFlags.Int("process-sysmon-buffer", 1000, "Buffer size for internal message queue")
 	pFlags.Int("process-sysmon-cache", 1000000, "Cache size for processing sysmon streams")
+	pFlags.Bool("process-suricata-enabled", false, "Enable Suricata processing")
 
 	pFlags.Bool("output-correlations-wise-enabled", false, "Push correlations to Arkime WISE via Redis")
 	pFlags.String("output-correlations-wise-redis-host", "localhost:6379", "Redis host to consume wise from.")
