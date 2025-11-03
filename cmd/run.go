@@ -38,7 +38,7 @@ func run(cmd *cobra.Command, args []string) {
 		return nil
 	})
 
-	eventsSysmon := make(processing.HandleSysmonCoreBlocking, viper.GetInt("sysmon.buffer"))
+	eventsSysmon := make(processing.HandleSysmonCoreBlocking, viper.GetInt("process.sysmon.buffer"))
 	defer close(eventsSysmon)
 
 	poolConf := processing.ConfigWorkerPool{
@@ -52,10 +52,10 @@ func run(cmd *cobra.Command, args []string) {
 
 	confSysmonConsume.TX = eventsSysmon.Func()
 
-	confSysmonConsume.Redis.Key = viper.GetString("sysmon.redis.key")
-	confSysmonConsume.Redis.Addr = viper.GetString("sysmon.redis.host")
-	confSysmonConsume.Redis.DB = viper.GetInt("sysmon.redis.db")
-	confSysmonConsume.Redis.Password = viper.GetString("sysmon.redis.password")
+	confSysmonConsume.Redis.Key = viper.GetString("input.sysmon.redis.key")
+	confSysmonConsume.Redis.Addr = viper.GetString("input.sysmon.redis.host")
+	confSysmonConsume.Redis.DB = viper.GetInt("input.sysmon.redis.db")
+	confSysmonConsume.Redis.Password = viper.GetString("input.sysmon.redis.password")
 
 	if err := processing.Consume(*confSysmonConsume); err != nil {
 		processing.Logger.Error(err.Error())
@@ -66,10 +66,10 @@ func run(cmd *cobra.Command, args []string) {
 	confSysmonProcess.ConfigWorkerPool = poolConf
 
 	confSysmonProcess.RX = eventsSysmon
-	confSysmonProcess.CacheSize = viper.GetInt("sysmon.cache")
+	confSysmonProcess.CacheSize = viper.GetInt("process.sysmon.cache")
 	confSysmonProcess.Handers = make([]processing.HandleWinlog, 0)
 
-	if p := viper.GetString("output.file.correlations"); p != "" {
+	if p := viper.GetString("output.correlations.file.path"); viper.GetBool("output.correlations.file.enabled") && p != "" {
 		log := processing.Logger.With("path", p)
 		log.Debug("appending to file")
 		h, err := processing.NewWriterFile(p)
@@ -86,12 +86,12 @@ func run(cmd *cobra.Command, args []string) {
 		confSysmonProcess.Handers = append(confSysmonProcess.Handers, h.Func())
 	}
 
-	if viper.GetBool("wise.enabled") {
+	if viper.GetBool("output.correlations.wise.enabled") {
 		h, err := processing.NewWriterWISE(processing.ConfigRedis{
 			DynKey:   true,
-			Addr:     viper.GetString("wise.redis.host"),
-			DB:       viper.GetInt("wise.redis.db"),
-			Password: viper.GetString("wise.redis.password"),
+			Addr:     viper.GetString("output.correlations.wise.redis.host"),
+			DB:       viper.GetInt("output.correlations.wise.redis.db"),
+			Password: viper.GetString("output.correlations.wise.redis.password"),
 		})
 		if err != nil {
 			processing.Logger.Error(err.Error())
@@ -130,35 +130,38 @@ func init() {
 	register := []string{
 		"log-interval",
 		"log-debug",
-		"sysmon-redis-host",
-		"sysmon-redis-db",
-		"sysmon-redis-password",
-		"sysmon-redis-key",
-		"sysmon-buffer",
-		"sysmon-cache",
-		"output-file-correlations",
-		"wise-enabled",
-		"wise-redis-host",
-		"wise-redis-db",
-		"wise-redis-password",
+		"input-sysmon-redis-host",
+		"input-sysmon-redis-db",
+		"input-sysmon-redis-password",
+		"input-sysmon-redis-key",
+		"process-sysmon-buffer",
+		"process-sysmon-cache",
+		"output-correlations-wise-enabled",
+		"output-correlations-wise-redis-host",
+		"output-correlations-wise-redis-db",
+		"output-correlations-wise-redis-password",
+		"output-correlations-file-enabled",
+		"output-correlations-file-path",
 	}
 
 	pFlags.Duration("log-interval", 30*time.Second, "Periodic logging")
 	pFlags.Bool("log-debug", false, "Increase logging verbosity")
 
-	pFlags.String("sysmon-redis-host", "localhost:6379", "Redis host to consume sysmon from.")
-	pFlags.Int("sysmon-redis-db", 0, "Redis database for sysmon consumer.")
-	pFlags.String("sysmon-redis-password", "", "Password for sysmon redis instance. Empty value disables authentication.")
-	pFlags.String("sysmon-redis-key", "winlogbeat", "Redis key for winlogbeat messages.")
-	pFlags.Int("sysmon-buffer", 1000, "Buffer size for internal message queue")
-	pFlags.Int("sysmon-cache", 1000000, "Cache size for processing sysmon streams")
+	pFlags.String("input-sysmon-redis-host", "localhost:6379", "Redis host to consume sysmon from.")
+	pFlags.Int("input-sysmon-redis-db", 0, "Redis database for sysmon consumer.")
+	pFlags.String("input-sysmon-redis-password", "", "Password for sysmon redis instance. Empty value disables authentication.")
+	pFlags.String("input-sysmon-redis-key", "winlogbeat", "Redis key for winlogbeat messages.")
 
-	pFlags.Bool("wise-enabled", false, "Push correlations to Arkime WISE via Redis")
-	pFlags.String("wise-redis-host", "localhost:6379", "Redis host to consume wise from.")
-	pFlags.Int("wise-redis-db", 1, "Redis database for wise consumer.")
-	pFlags.String("wise-redis-password", "", "Password for wise redis instance. Empty value disables authentication.")
+	pFlags.Int("process-sysmon-buffer", 1000, "Buffer size for internal message queue")
+	pFlags.Int("process-sysmon-cache", 1000000, "Cache size for processing sysmon streams")
 
-	pFlags.String("output-file-correlations", "", "Log file for sysmon correlations")
+	pFlags.Bool("output-correlations-wise-enabled", false, "Push correlations to Arkime WISE via Redis")
+	pFlags.String("output-correlations-wise-redis-host", "localhost:6379", "Redis host to consume wise from.")
+	pFlags.Int("output-correlations-wise-redis-db", 1, "Redis database for wise consumer.")
+	pFlags.String("output-correlations-wise-redis-password", "", "Password for wise redis instance. Empty value disables authentication.")
+
+	pFlags.Bool("output-correlations-file-enabled", false, "Enable sysmon correlation log file output")
+	pFlags.String("output-correlations-file-path", "", "Log file for sysmon correlations")
 
 	for _, flg := range register {
 		if err := viper.BindPFlag(strings.ReplaceAll(flg, "-", "."), pFlags.Lookup(flg)); err != nil {
