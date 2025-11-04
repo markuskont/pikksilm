@@ -41,14 +41,14 @@ func run(cmd *cobra.Command, args []string) {
 	eventsSysmon := make(processing.HandleSysmonCoreBlocking, viper.GetInt("process.sysmon.buffer"))
 	defer close(eventsSysmon)
 
-	poolConf := processing.ConfigWorkerPool{
+	confPool := processing.ConfigWorkerPool{
 		Pool:        pool,
 		Ctx:         ctx,
 		LogInterval: viper.GetDuration("log.interval"),
 	}
 
 	confSysmonConsume := &processing.ConfigConsume{}
-	confSysmonConsume.ConfigWorkerPool = poolConf
+	confSysmonConsume.ConfigWorkerPool = confPool
 
 	confSysmonConsume.TX = eventsSysmon.Func()
 
@@ -64,8 +64,8 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	confSysmonProcess := &processing.ConfigWinlogProcess{}
-	confSysmonProcess.ConfigWorkerPool = poolConf
+	confSysmonProcess := &processing.ConfigProcessWinlog{}
+	confSysmonProcess.ConfigWorkerPool = confPool
 
 	confSysmonProcess.RX = eventsSysmon
 	confSysmonProcess.CacheSize = viper.GetInt("process.sysmon.cache")
@@ -95,7 +95,7 @@ func run(cmd *cobra.Command, args []string) {
 		defer close(eventsSuricata)
 
 		confSuricataConsume := &processing.ConfigConsume{}
-		confSuricataConsume.ConfigWorkerPool = poolConf
+		confSuricataConsume.ConfigWorkerPool = confPool
 
 		confSuricataConsume.TX = eventsSuricata.Func()
 
@@ -107,6 +107,24 @@ func run(cmd *cobra.Command, args []string) {
 		}
 
 		if err := processing.Consume(*confSuricataConsume); err != nil {
+			processing.Logger.Error(err.Error())
+			os.Exit(1)
+		}
+
+		confSuricataProcess := &processing.ConfigProcessSuricata{}
+		confSuricataProcess.ConfigWorkerPool = confPool
+
+		confSuricataProcess.RX.Events = eventsSuricata
+
+		h := processing.NewHandleBridge(confPool.Ctx, viper.GetInt("process.suricata.buffer"))
+		confSuricataProcess.RX.Correlations = h.RX()
+		confSysmonProcess.Handers = append(confSysmonProcess.Handers, h.Func())
+
+		confSuricataProcess.Cache = viper.GetInt("process.suricata.cache")
+		confSuricataProcess.BulkSize = viper.GetInt("process.suricata.bulk")
+		confSuricataProcess.Delay = viper.GetDuration("process.suricata.delay")
+
+		if err := processing.ProcessSuricata(*confSuricataProcess); err != nil {
 			processing.Logger.Error(err.Error())
 			os.Exit(1)
 		}
@@ -127,7 +145,7 @@ func run(cmd *cobra.Command, args []string) {
 		confSysmonProcess.Handers = append(confSysmonProcess.Handers, h.Func())
 	}
 
-	if err := processing.WinlogProcess(*confSysmonProcess); err != nil {
+	if err := processing.ProcessWinlog(*confSysmonProcess); err != nil {
 		processing.Logger.Error(err.Error())
 		os.Exit(1)
 	}
@@ -169,6 +187,9 @@ func init() {
 		"process-sysmon-cache",
 		"process-suricata-enabled",
 		"process-suricata-buffer",
+		"process-suricata-cache",
+		"process-suricata-bulk",
+		"process-suricata-delay",
 		"output-correlations-wise-enabled",
 		"output-correlations-wise-redis-host",
 		"output-correlations-wise-redis-db",
@@ -197,6 +218,9 @@ func init() {
 
 	pFlags.Bool("process-suricata-enabled", false, "Enable Suricata processing")
 	pFlags.Int("process-suricata-buffer", 1000, "Buffer size for internal message queue")
+	pFlags.Int("process-suricata-cache", 100000, "Number of sysmon correlations to cache")
+	pFlags.Int("process-suricata-bulk", 100000, "Maximum number of items to store in delay bulk.")
+	pFlags.Duration("process-suricata-delay", 1*time.Second, "Suricata events are stored in delay bulk. That bulk will be processed at this interval.")
 
 	pFlags.Bool("output-correlations-wise-enabled", false, "Push correlations to Arkime WISE via Redis")
 	pFlags.String("output-correlations-wise-redis-host", "localhost:6379", "Redis host to consume wise from.")

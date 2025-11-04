@@ -103,15 +103,15 @@ func newWinlog(cache int, handlers []HandleWinlog) (*winlog, error) {
 	}, nil
 }
 
-type ConfigWinlogProcess struct {
+type ConfigProcessWinlog struct {
 	ConfigWorkerPool
 
-	RX        chan *SysmonCoreECS
+	RX        <-chan *SysmonCoreECS
 	CacheSize int
 	Handers   []HandleWinlog
 }
 
-func WinlogProcess(c ConfigWinlogProcess) error {
+func ProcessWinlog(c ConfigProcessWinlog) error {
 	if err := c.Validate(); err != nil {
 		return fmt.Errorf("winlog: %s", err)
 	}

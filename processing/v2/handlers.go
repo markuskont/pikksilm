@@ -2,7 +2,6 @@ package processing
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 
@@ -32,7 +31,54 @@ func (h HandleSysmonCoreBlocking) Func() HandleConsume {
 	}
 }
 
+type HandleDecodeGeneric chan dict.Entry
+
+func (h HandleDecodeGeneric) Func() HandleConsume {
+	return func(ctx context.Context, b []byte) error {
+		var obj dict.Entry
+		if err := json.Unmarshal(b, &obj); err != nil {
+			return err
+		}
+		select {
+		case h <- obj:
+		case <-ctx.Done():
+			return nil
+		}
+		return nil
+	}
+}
+
 type HandleWinlog func(SysmonCoreECS) error
+
+type HandleBridge struct {
+	ch  chan SysmonCoreECS
+	ctx context.Context
+}
+
+func (h HandleBridge) Func() HandleWinlog {
+	return func(sce SysmonCoreECS) error {
+		select {
+		case h.ch <- sce:
+		case <-h.ctx.Done():
+			return nil
+		}
+		return nil
+	}
+}
+
+func (h *HandleBridge) Close() error {
+	close(h.ch)
+	return nil
+}
+
+func (h HandleBridge) RX() <-chan SysmonCoreECS { return h.ch }
+
+func NewHandleBridge(ctx context.Context, buffer int) *HandleBridge {
+	return &HandleBridge{
+		ch:  make(chan SysmonCoreECS, buffer),
+		ctx: ctx,
+	}
+}
 
 type HandleOutputIO struct {
 	io.WriteCloser
@@ -90,21 +136,4 @@ func NewWriterWISE(c ConfigRedis) (*HandleOutputWise, error) {
 			DB:       c.DB,
 			Password: c.Password,
 		})}, nil
-}
-
-type HandleDecodeGeneric chan dict.Entry
-
-func (h HandleDecodeGeneric) Func() HandleConsume {
-	return func(ctx context.Context, b []byte) error {
-		var obj dict.Entry
-		if err := json.Unmarshal(b, &obj); err != nil {
-			return err
-		}
-		select {
-		case h <- obj:
-		case <-ctx.Done():
-			return nil
-		}
-		return nil
-	}
 }
