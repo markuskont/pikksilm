@@ -3,6 +3,7 @@ package processing
 /*
 SysmonCoreECS is a concise decoder struct for fetching only the fields we are interested in
 Sub structs are immutable in order to omit constant nil pointer checks when fetching fields
+Omitting pointers also makes the struct safe to copy between workers
 */
 type SysmonCoreECS struct {
 	Process struct {
