@@ -52,10 +52,12 @@ func run(cmd *cobra.Command, args []string) {
 
 	confSysmonConsume.TX = eventsSysmon.Func()
 
-	confSysmonConsume.Redis.Key = viper.GetString("input.sysmon.redis.key")
-	confSysmonConsume.Redis.Addr = viper.GetString("input.sysmon.redis.host")
-	confSysmonConsume.Redis.DB = viper.GetInt("input.sysmon.redis.db")
-	confSysmonConsume.Redis.Password = viper.GetString("input.sysmon.redis.password")
+	confSysmonConsume.Redis = processing.ConfigRedis{
+		Key:      viper.GetString("input.sysmon.redis.key"),
+		Addr:     viper.GetString("input.sysmon.redis.host"),
+		DB:       viper.GetInt("input.sysmon.redis.db"),
+		Password: viper.GetString("input.sysmon.redis.password"),
+	}
 
 	if err := processing.Consume(*confSysmonConsume); err != nil {
 		processing.Logger.Error(err.Error())
@@ -88,6 +90,26 @@ func run(cmd *cobra.Command, args []string) {
 
 	if viper.GetBool("process.suricata.enabled") {
 		processing.Logger.Debug("streaming Suricata EVE")
+
+		eventsSuricata := make(processing.HandleDecodeGeneric, viper.GetInt("process.suricata.buffer"))
+		defer close(eventsSuricata)
+
+		confSuricataConsume := &processing.ConfigConsume{}
+		confSuricataConsume.ConfigWorkerPool = poolConf
+
+		confSuricataConsume.TX = eventsSuricata.Func()
+
+		confSuricataConsume.Redis = processing.ConfigRedis{
+			Key:      viper.GetString("input.suricata.redis.key"),
+			Addr:     viper.GetString("input.suricata.redis.host"),
+			DB:       viper.GetInt("input.suricata.redis.db"),
+			Password: viper.GetString("input.suricata.redis.password"),
+		}
+
+		if err := processing.Consume(*confSuricataConsume); err != nil {
+			processing.Logger.Error(err.Error())
+			os.Exit(1)
+		}
 	}
 
 	if viper.GetBool("output.correlations.wise.enabled") {
@@ -143,15 +165,18 @@ func init() {
 		"input-suricata-redis-db",
 		"input-suricata-redis-password",
 		"input-suricata-redis-key",
-		"process-suricata-enabled",
 		"process-sysmon-buffer",
 		"process-sysmon-cache",
+		"process-suricata-enabled",
+		"process-suricata-buffer",
 		"output-correlations-wise-enabled",
 		"output-correlations-wise-redis-host",
 		"output-correlations-wise-redis-db",
 		"output-correlations-wise-redis-password",
 		"output-correlations-file-enabled",
 		"output-correlations-file-path",
+		"output-suricata-file-enabled",
+		"output-suricata-file-path",
 	}
 
 	pFlags.Duration("log-interval", 30*time.Second, "Periodic logging")
@@ -169,7 +194,9 @@ func init() {
 
 	pFlags.Int("process-sysmon-buffer", 1000, "Buffer size for internal message queue")
 	pFlags.Int("process-sysmon-cache", 1000000, "Cache size for processing sysmon streams")
+
 	pFlags.Bool("process-suricata-enabled", false, "Enable Suricata processing")
+	pFlags.Int("process-suricata-buffer", 1000, "Buffer size for internal message queue")
 
 	pFlags.Bool("output-correlations-wise-enabled", false, "Push correlations to Arkime WISE via Redis")
 	pFlags.String("output-correlations-wise-redis-host", "localhost:6379", "Redis host to consume wise from.")
@@ -178,6 +205,9 @@ func init() {
 
 	pFlags.Bool("output-correlations-file-enabled", false, "Enable sysmon correlation log file output")
 	pFlags.String("output-correlations-file-path", "", "Log file for sysmon correlations")
+
+	pFlags.Bool("output-suricata-file-enabled", false, "Enable Suricata EVE log file output")
+	pFlags.String("output-suricata-file-path", "", "Log file for Suricata EVE")
 
 	for _, flg := range register {
 		if err := viper.BindPFlag(strings.ReplaceAll(flg, "-", "."), pFlags.Lookup(flg)); err != nil {

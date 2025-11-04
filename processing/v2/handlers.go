@@ -2,9 +2,11 @@ package processing
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 
+	"github.com/StamusNetworks/goupil/dict"
 	"github.com/go-redis/redis/v8"
 )
 
@@ -88,4 +90,21 @@ func NewWriterWISE(c ConfigRedis) (*HandleOutputWise, error) {
 			DB:       c.DB,
 			Password: c.Password,
 		})}, nil
+}
+
+type HandleDecodeGeneric chan dict.Entry
+
+func (h HandleDecodeGeneric) Func() HandleConsume {
+	return func(ctx context.Context, b []byte) error {
+		var obj dict.Entry
+		if err := json.Unmarshal(b, &obj); err != nil {
+			return err
+		}
+		select {
+		case h <- obj:
+		case <-ctx.Done():
+			return nil
+		}
+		return nil
+	}
 }

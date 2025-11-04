@@ -3,6 +3,7 @@ module github.com/markuskont/pikksilm
 go 1.24.0
 
 require (
+	github.com/StamusNetworks/goupil v0.0.0-20250718144256-7a511117ebbd
 	github.com/elliotchance/orderedmap/v2 v2.7.0
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/json-iterator/go v1.1.12
