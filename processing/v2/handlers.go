@@ -49,13 +49,14 @@ func (h HandleDecodeGeneric) Func() HandleConsume {
 }
 
 type HandleWinlog func(SysmonCoreECS) error
+type HandleEncoded func([]byte) error
 
 type HandleBridge struct {
 	ch  chan SysmonCoreECS
 	ctx context.Context
 }
 
-func (h HandleBridge) Func() HandleWinlog {
+func (h HandleBridge) FuncWinlog() HandleWinlog {
 	return func(sce SysmonCoreECS) error {
 		select {
 		case h.ch <- sce:
@@ -85,13 +86,21 @@ type HandleOutputIO struct {
 	written int
 }
 
-func (h *HandleOutputIO) Func() HandleWinlog {
+func (h *HandleOutputIO) FuncWinlog() HandleWinlog {
 	return func(sce SysmonCoreECS) error {
 		encoded, err := json.Marshal(sce)
 		if err != nil {
 			return err
 		}
 		n, err := h.Write(append(encoded, newline...))
+		h.written += n
+		return err
+	}
+}
+
+func (h *HandleOutputIO) FuncEncoded() HandleEncoded {
+	return func(b []byte) error {
+		n, err := h.Write(append(b, newline...))
 		h.written += n
 		return err
 	}

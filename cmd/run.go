@@ -85,7 +85,7 @@ func run(cmd *cobra.Command, args []string) {
 			}
 			log.Debug("closing file")
 		}()
-		confSysmonProcess.Handers = append(confSysmonProcess.Handers, h.Func())
+		confSysmonProcess.Handers = append(confSysmonProcess.Handers, h.FuncWinlog())
 	}
 
 	if viper.GetBool("process.suricata.enabled") {
@@ -118,11 +118,28 @@ func run(cmd *cobra.Command, args []string) {
 
 		h := processing.NewHandleBridge(confPool.Ctx, viper.GetInt("process.suricata.buffer"))
 		confSuricataProcess.RX.Correlations = h.RX()
-		confSysmonProcess.Handers = append(confSysmonProcess.Handers, h.Func())
+		confSysmonProcess.Handers = append(confSysmonProcess.Handers, h.FuncWinlog())
 
 		confSuricataProcess.Cache = viper.GetInt("process.suricata.cache")
 		confSuricataProcess.BulkSize = viper.GetInt("process.suricata.bulk")
 		confSuricataProcess.Delay = viper.GetDuration("process.suricata.delay")
+
+		if p := viper.GetString("output.suricata.file.path"); viper.GetBool("output.suricata.file.enabled") && p != "" {
+			log := processing.Logger.With("path", p)
+			log.Debug("appending to file")
+			h, err := processing.NewWriterFile(p)
+			if err != nil {
+				processing.Logger.Error(err.Error())
+				os.Exit(1)
+			}
+			defer func() {
+				if err := h.Close(); err != nil {
+					log.Error(err.Error())
+				}
+				log.Debug("closing file")
+			}()
+			confSuricataProcess.Handlers = append(confSuricataProcess.Handlers, h.FuncEncoded())
+		}
 
 		if err := processing.ProcessSuricata(*confSuricataProcess); err != nil {
 			processing.Logger.Error(err.Error())
