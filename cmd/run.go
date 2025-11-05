@@ -230,11 +230,11 @@ func init() {
 	pFlags.String("input-suricata-redis-password", "", "Password for suricata redis instance. Empty value disables authentication.")
 	pFlags.String("input-suricata-redis-key", "suricata", "Redis key for suricata messages.")
 
-	pFlags.Int("process-sysmon-buffer", 1000, "Buffer size for internal message queue")
+	pFlags.Int("process-sysmon-buffer", 10000, "Buffer size for internal message queue")
 	pFlags.Int("process-sysmon-cache", 1000000, "Cache size for processing sysmon streams")
 
 	pFlags.Bool("process-suricata-enabled", false, "Enable Suricata processing")
-	pFlags.Int("process-suricata-buffer", 1000, "Buffer size for internal message queue")
+	pFlags.Int("process-suricata-buffer", 10000, "Buffer size for internal message queue")
 	pFlags.Int("process-suricata-cache", 100000, "Number of sysmon correlations to cache")
 	pFlags.Int("process-suricata-bulk", 100000, "Maximum number of items to store in delay bulk.")
 	pFlags.Duration("process-suricata-delay", 1*time.Second, "Suricata events are stored in delay bulk. That bulk will be processed at this interval.")
