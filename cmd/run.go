@@ -240,8 +240,8 @@ func init() {
 	pFlags.Duration("process-suricata-delay", 1*time.Second, "Suricata events are stored in delay bulk. That bulk will be processed at this interval.")
 
 	pFlags.Bool("output-correlations-wise-enabled", false, "Push correlations to Arkime WISE via Redis")
-	pFlags.String("output-correlations-wise-redis-host", "localhost:6379", "Redis host to consume wise from.")
-	pFlags.Int("output-correlations-wise-redis-db", 1, "Redis database for wise consumer.")
+	pFlags.String("output-correlations-wise-redis-host", "localhost:6379", "Redis host and port.")
+	pFlags.Int("output-correlations-wise-redis-db", 1, "Redis database for wise producer.")
 	pFlags.String("output-correlations-wise-redis-password", "", "Password for wise redis instance. Empty value disables authentication.")
 
 	pFlags.Bool("output-correlations-file-enabled", false, "Enable sysmon correlation log file output")
