@@ -29,7 +29,7 @@ type suricataEnrich struct {
 	// TODO: two layer system where we have two bulks and we rotate the second, then replace with first
 	// current approach has could have issue where last messages are not delayed long enough
 	bulk     []dict.Entry
-	handlers []HandleEncoded
+	handlers []HandleEncodedBulk
 }
 
 func (s *suricataEnrich) store(event dict.Entry) error {
@@ -43,11 +43,24 @@ func (s *suricataEnrich) store(event dict.Entry) error {
 }
 
 func (s *suricataEnrich) processBulk() error {
+	encoded := make([][]byte, 0, len(s.bulk))
 	for _, event := range s.bulk {
 		if err := s.process(event); err != nil {
 			return err
 		}
+		b, err := json.Marshal(event)
+		if err != nil {
+			return err
+		}
+		encoded = append(encoded, b)
 	}
+
+	for _, handle := range s.handlers {
+		if err := handle(encoded); err != nil {
+			return err
+		}
+	}
+
 	s.bulk = make([]dict.Entry, 0, s.bulkSize)
 	s.stats.bulk.rotations++
 	return nil
@@ -62,19 +75,10 @@ func (s *suricataEnrich) process(event dict.Entry) error {
 			s.stats.cache.misses++
 		}
 	}
-	encoded, err := json.Marshal(event)
-	if err != nil {
-		return err
-	}
-	for _, handle := range s.handlers {
-		if err := handle(encoded); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
-func newSuricata(cache int, bulk int, handlers []HandleEncoded) (*suricataEnrich, error) {
+func newSuricata(cache int, bulk int, handlers []HandleEncodedBulk) (*suricataEnrich, error) {
 	if len(handlers) == 0 {
 		return nil, errors.New("missing handlers")
 	}
@@ -102,7 +106,7 @@ type ConfigProcessSuricata struct {
 		Correlations <-chan SysmonCoreECS
 	}
 
-	Handlers []HandleEncoded
+	Handlers []HandleEncodedBulk
 }
 
 func ProcessSuricata(c ConfigProcessSuricata) error {

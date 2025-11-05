@@ -141,6 +141,21 @@ func run(cmd *cobra.Command, args []string) {
 			confSuricataProcess.Handlers = append(confSuricataProcess.Handlers, h.FuncEncoded())
 		}
 
+		if viper.GetBool("output.suricata.redis.enabled") {
+			processing.Logger.Debug("starting Suricata Redis output handler")
+			h, err := processing.NewWriterRedis(processing.ConfigRedis{
+				Key:      viper.GetString("output.suricata.redis.key"),
+				Addr:     viper.GetString("output.suricata.redis.host"),
+				DB:       viper.GetInt("output.suricata.redis.db"),
+				Password: viper.GetString("output.suricata.redis.password"),
+			})
+			if err != nil {
+				processing.Logger.Error(err.Error())
+				os.Exit(1)
+			}
+			confSuricataProcess.Handlers = append(confSuricataProcess.Handlers, h.FuncEncodedBulk())
+		}
+
 		if err := processing.ProcessSuricata(*confSuricataProcess); err != nil {
 			processing.Logger.Error(err.Error())
 			os.Exit(1)
@@ -149,7 +164,7 @@ func run(cmd *cobra.Command, args []string) {
 
 	if viper.GetBool("output.correlations.wise.enabled") {
 		processing.Logger.Debug("starting Arkime WISE handler")
-		h, err := processing.NewWriterWISE(processing.ConfigRedis{
+		h, err := processing.NewWriterRedis(processing.ConfigRedis{
 			DynKey:   true,
 			Addr:     viper.GetString("output.correlations.wise.redis.host"),
 			DB:       viper.GetInt("output.correlations.wise.redis.db"),
@@ -159,7 +174,7 @@ func run(cmd *cobra.Command, args []string) {
 			processing.Logger.Error(err.Error())
 			os.Exit(1)
 		}
-		confSysmonProcess.Handers = append(confSysmonProcess.Handers, h.Func())
+		confSysmonProcess.Handers = append(confSysmonProcess.Handers, h.FuncWinlog())
 	}
 
 	if err := processing.ProcessWinlog(*confSysmonProcess); err != nil {
@@ -215,6 +230,11 @@ func init() {
 		"output-correlations-file-path",
 		"output-suricata-file-enabled",
 		"output-suricata-file-path",
+		"output-suricata-redis-enabled",
+		"output-suricata-redis-host",
+		"output-suricata-redis-db",
+		"output-suricata-redis-password",
+		"output-suricata-redis-key",
 	}
 
 	pFlags.Duration("log-interval", 30*time.Second, "Periodic logging")
@@ -249,6 +269,12 @@ func init() {
 
 	pFlags.Bool("output-suricata-file-enabled", false, "Enable Suricata EVE log file output")
 	pFlags.String("output-suricata-file-path", "", "Log file for Suricata EVE")
+
+	pFlags.Bool("output-suricata-redis-enabled", false, "Push Suricata EVE to Redis")
+	pFlags.String("output-suricata-redis-host", "localhost:6379", "Redis host to consume wise from.")
+	pFlags.Int("output-suricata-redis-db", 1, "Redis database for Suricata")
+	pFlags.String("output-suricata-redis-password", "", "Password for Suricata EVE instance. Empty value disables authentication.")
+	pFlags.String("output-suricata-redis-key", "suricata", "Redis key for suricata messages.")
 
 	for _, flg := range register {
 		if err := viper.BindPFlag(strings.ReplaceAll(flg, "-", "."), pFlags.Lookup(flg)); err != nil {

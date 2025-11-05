@@ -2,6 +2,7 @@ package processing
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 
@@ -49,7 +50,7 @@ func (h HandleDecodeGeneric) Func() HandleConsume {
 }
 
 type HandleWinlog func(SysmonCoreECS) error
-type HandleEncoded func([]byte) error
+type HandleEncodedBulk func([][]byte) error
 
 type HandleBridge struct {
 	ch  chan SysmonCoreECS
@@ -98,11 +99,16 @@ func (h *HandleOutputIO) FuncWinlog() HandleWinlog {
 	}
 }
 
-func (h *HandleOutputIO) FuncEncoded() HandleEncoded {
-	return func(b []byte) error {
-		n, err := h.Write(append(b, newline...))
-		h.written += n
-		return err
+func (h *HandleOutputIO) FuncEncoded() HandleEncodedBulk {
+	return func(bulk [][]byte) error {
+		for _, b := range bulk {
+			n, err := h.Write(append(b, newline...))
+			if err != nil {
+				return err
+			}
+			h.written += n
+		}
+		return nil
 	}
 }
 
@@ -118,11 +124,13 @@ func NewWriterFile(path string) (*HandleOutputIO, error) {
 	return &HandleOutputIO{WriteCloser: f}, nil
 }
 
-type HandleOutputWise struct {
+type HandleOutputRedis struct {
 	redis *redis.Client
+	key   string
 }
 
-func (h HandleOutputWise) Func() HandleWinlog {
+// FIXME: this pushes items one by one which is suboptimal and wont scale to large setups
+func (h HandleOutputRedis) FuncWinlog() HandleWinlog {
 	return func(sce SysmonCoreECS) error {
 		encoded, err := json.Marshal(sce)
 		if err != nil {
@@ -135,14 +143,34 @@ func (h HandleOutputWise) Func() HandleWinlog {
 	}
 }
 
-func NewWriterWISE(c ConfigRedis) (*HandleOutputWise, error) {
+func (h HandleOutputRedis) FuncEncodedBulk() HandleEncodedBulk {
+	return func(bulk [][]byte) error {
+		if h.key == "" {
+			return errors.New("redis key missing")
+		}
+		if len(bulk) == 0 {
+			return nil
+		}
+		pipe := h.redis.Pipeline()
+		for _, b := range bulk {
+			if err := pipe.RPush(context.TODO(), h.key, b).Err(); err != nil {
+				return err
+			}
+		}
+		_, err := pipe.Exec(context.TODO())
+		return err
+	}
+}
+
+func NewWriterRedis(c ConfigRedis) (*HandleOutputRedis, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
-	return &HandleOutputWise{
+	return &HandleOutputRedis{
 		redis: redis.NewClient(&redis.Options{
 			Addr:     c.Addr,
 			DB:       c.DB,
 			Password: c.Password,
-		})}, nil
+		}),
+		key: c.Key}, nil
 }
