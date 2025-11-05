@@ -41,5 +41,5 @@ type SysmonCoreECS struct {
 		ComputerName string `json:"computer_name"`
 		EventID      string `json:"event_id"`
 		Opcode       string `json:"opcode"`
-	}
+	} `json:"winlog"`
 }
