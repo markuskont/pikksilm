@@ -1,4 +1,4 @@
-FROM golang:1.18 AS Builder
+FROM golang:1.24 AS Builder
 
 RUN mkdir -p /src
 COPY . /src/
@@ -6,7 +6,7 @@ WORKDIR /src/
 
 RUN go build -o /src/pikksilm .
 
-FROM debian:bullseye
+FROM debian:trixie
 COPY --from=Builder /src/pikksilm /usr/local/bin/
 
 ENV PIKKSILM_HOME "/var/lib/pikksilm"
