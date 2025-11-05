@@ -37,33 +37,40 @@ func (s *suricataEnrich) store(event dict.Entry) error {
 	s.bulk = append(s.bulk, event)
 	if len(s.bulk) == s.bulkSize {
 		s.stats.bulk.oversize++
-		return s.process()
+		return s.processBulk()
 	}
 	return nil
 }
 
-func (s *suricataEnrich) process() error {
+func (s *suricataEnrich) processBulk() error {
 	for _, event := range s.bulk {
-		if communityID, ok := event.GetString("community_id"); ok {
-			if correlation, correlated := s.cache.Get(communityID); correlated {
-				event.Set(correlation, "edr")
-				s.stats.cache.hits++
-			} else {
-				s.stats.cache.misses++
-			}
-		}
-		encoded, err := json.Marshal(event)
-		if err != nil {
+		if err := s.process(event); err != nil {
 			return err
-		}
-		for _, handle := range s.handlers {
-			if err := handle(encoded); err != nil {
-				return err
-			}
 		}
 	}
 	s.bulk = make([]dict.Entry, 0, s.bulkSize)
 	s.stats.bulk.rotations++
+	return nil
+}
+
+func (s *suricataEnrich) process(event dict.Entry) error {
+	if communityID, ok := event.GetString("community_id"); ok {
+		if correlation, correlated := s.cache.Get(communityID); correlated {
+			event.Set(correlation, "edr")
+			s.stats.cache.hits++
+		} else {
+			s.stats.cache.misses++
+		}
+	}
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	for _, handle := range s.handlers {
+		if err := handle(encoded); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -141,7 +148,7 @@ func ProcessSuricata(c ConfigProcessSuricata) error {
 				log.Debug("exit caught")
 				break loop
 			case <-process.C:
-				if err := suricata.process(); err != nil {
+				if err := suricata.processBulk(); err != nil {
 					return err
 				}
 			case event, ok := <-c.RX.Events:
