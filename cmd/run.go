@@ -162,13 +162,13 @@ func run(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	if viper.GetBool("output.correlations.wise.enabled") {
-		processing.Logger.Debug("starting Arkime WISE handler")
+	if viper.GetBool("output.correlations.redis.enabled") {
+		processing.Logger.Debug("starting Arkime WISE redis handler")
 		h, err := processing.NewWriterRedis(processing.ConfigRedis{
 			DynKey:   true,
-			Addr:     viper.GetString("output.correlations.wise.redis.host"),
-			DB:       viper.GetInt("output.correlations.wise.redis.db"),
-			Password: viper.GetString("output.correlations.wise.redis.password"),
+			Addr:     viper.GetString("output.correlations.redis.host"),
+			DB:       viper.GetInt("output.correlations.redis.db"),
+			Password: viper.GetString("output.correlations.redis.password"),
 		})
 		if err != nil {
 			processing.Logger.Error(err.Error())
@@ -222,10 +222,10 @@ func init() {
 		"process-suricata-cache",
 		"process-suricata-bulk",
 		"process-suricata-delay",
-		"output-correlations-wise-enabled",
-		"output-correlations-wise-redis-host",
-		"output-correlations-wise-redis-db",
-		"output-correlations-wise-redis-password",
+		"output-correlations-redis-enabled",
+		"output-correlations-redis-host",
+		"output-correlations-redis-db",
+		"output-correlations-redis-password",
 		"output-correlations-file-enabled",
 		"output-correlations-file-path",
 		"output-suricata-file-enabled",
@@ -259,10 +259,10 @@ func init() {
 	pFlags.Int("process-suricata-bulk", 100000, "Maximum number of items to store in delay bulk.")
 	pFlags.Duration("process-suricata-delay", 1*time.Second, "Suricata events are stored in delay bulk. That bulk will be processed at this interval.")
 
-	pFlags.Bool("output-correlations-wise-enabled", false, "Push correlations to Arkime WISE via Redis")
-	pFlags.String("output-correlations-wise-redis-host", "localhost:6379", "Redis host and port.")
-	pFlags.Int("output-correlations-wise-redis-db", 1, "Redis database for wise producer.")
-	pFlags.String("output-correlations-wise-redis-password", "", "Password for wise redis instance. Empty value disables authentication.")
+	pFlags.Bool("output-correlations-redis-enabled", false, "Push correlations to Arkime WISE via Redis")
+	pFlags.String("output-correlations-redis-host", "localhost:6379", "Redis host and port.")
+	pFlags.Int("output-correlations-redis-db", 1, "Redis database for wise producer.")
+	pFlags.String("output-correlations-redis-password", "", "Password for wise redis instance. Empty value disables authentication.")
 
 	pFlags.Bool("output-correlations-file-enabled", false, "Enable sysmon correlation log file output")
 	pFlags.String("output-correlations-file-path", "", "Log file for sysmon correlations")
