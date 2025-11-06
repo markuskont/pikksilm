@@ -78,13 +78,18 @@ func (s *suricataEnrich) process(event dict.Entry) error {
 	return nil
 }
 
-func newSuricata(cache int, bulk int, handlers []HandleEncodedBulk) (*suricataEnrich, error) {
+func newSuricata(cache int, bulk int, handlers []HandleEncodedBulk, preload []SysmonCoreECS) (*suricataEnrich, error) {
 	if len(handlers) == 0 {
 		return nil, errors.New("missing handlers")
 	}
 	c, err := lru.New2Q[string, SysmonCoreECS](cache)
 	if err != nil {
 		return nil, err
+	}
+	for _, v := range preload {
+		if v.Network.CommunityID != "" {
+			c.Add(v.Network.CommunityID, v)
+		}
 	}
 	return &suricataEnrich{
 		cache:    c,
@@ -107,6 +112,7 @@ type ConfigProcessSuricata struct {
 	}
 
 	Handlers []HandleEncodedBulk
+	Preload  []SysmonCoreECS
 }
 
 func ProcessSuricata(c ConfigProcessSuricata) error {
@@ -135,7 +141,7 @@ func ProcessSuricata(c ConfigProcessSuricata) error {
 		report := time.NewTicker(c.LogInterval)
 		defer report.Stop()
 
-		suricata, err := newSuricata(c.Cache, c.BulkSize, c.Handlers)
+		suricata, err := newSuricata(c.Cache, c.BulkSize, c.Handlers, c.Preload)
 		if err != nil {
 			return fmt.Errorf("suricata: %s", err)
 		}
@@ -147,6 +153,7 @@ func ProcessSuricata(c ConfigProcessSuricata) error {
 		for {
 			select {
 			case <-report.C:
+				suricata.stats.cached = suricata.cache.Len()
 				log.Info("report", "stats", suricata.stats)
 			case <-c.Ctx.Done():
 				log.Debug("exit caught")
@@ -169,7 +176,6 @@ func ProcessSuricata(c ConfigProcessSuricata) error {
 					break loop
 				}
 				suricata.cache.Add(corr.Network.CommunityID, corr)
-				suricata.stats.cached = suricata.cache.Len()
 			}
 		}
 		return nil

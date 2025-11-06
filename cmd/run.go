@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -88,6 +89,34 @@ func run(cmd *cobra.Command, args []string) {
 		confSysmonProcess.Handers = append(confSysmonProcess.Handers, h.FuncWinlog())
 	}
 
+	if p := viper.GetString("persist.file.path"); viper.GetBool("persist.file.enabled") && p != "" {
+		log := processing.Logger.With("path", p)
+		log.Debug("loading persist")
+		exists, err := processing.LoadPersist(p, &confSysmonProcess.Persist.Preload)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(1)
+		}
+		if !exists {
+			log.Warn("persist file missing")
+		}
+		confSysmonProcess.Persist.Handler = func(sce []processing.SysmonCoreECS) error {
+			log.Info("persist dump", "count", len(sce))
+			f, err := os.Create(p)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			b, err := json.Marshal(sce)
+			if err != nil {
+				return err
+			}
+			_, err = f.Write(b)
+			return err
+		}
+		log.Info("persist loaded", "count", len(confSysmonProcess.Persist.Preload))
+	}
+
 	if viper.GetBool("process.suricata.enabled") {
 		processing.Logger.Debug("streaming Suricata EVE")
 
@@ -119,6 +148,8 @@ func run(cmd *cobra.Command, args []string) {
 		h := processing.NewHandleBridge(confPool.Ctx, viper.GetInt("process.suricata.buffer"))
 		confSuricataProcess.RX.Correlations = h.RX()
 		confSysmonProcess.Handers = append(confSysmonProcess.Handers, h.FuncWinlog())
+
+		confSuricataProcess.Preload = confSysmonProcess.Persist.Preload
 
 		confSuricataProcess.Cache = viper.GetInt("process.suricata.cache")
 		confSuricataProcess.BulkSize = viper.GetInt("process.suricata.bulk")
@@ -222,6 +253,8 @@ func init() {
 		"process-suricata-cache",
 		"process-suricata-bulk",
 		"process-suricata-delay",
+		"persist-file-enabled",
+		"persist-file-path",
 		"output-correlations-redis-enabled",
 		"output-correlations-redis-host",
 		"output-correlations-redis-db",
@@ -258,6 +291,9 @@ func init() {
 	pFlags.Int("process-suricata-cache", 100000, "Number of sysmon correlations to cache")
 	pFlags.Int("process-suricata-bulk", 100000, "Maximum number of items to store in delay bulk.")
 	pFlags.Duration("process-suricata-delay", 1*time.Second, "Suricata events are stored in delay bulk. That bulk will be processed at this interval.")
+
+	pFlags.Bool("persist-file-enabled", false, "Enable correlation cache persistence in filesystem.")
+	pFlags.String("persist-file-path", "", "Location of persistence file.")
 
 	pFlags.Bool("output-correlations-redis-enabled", false, "Push correlations to Arkime WISE via Redis")
 	pFlags.String("output-correlations-redis-host", "localhost:6379", "Redis host and port.")
