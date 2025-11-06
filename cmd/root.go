@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	homedir "github.com/mitchellh/go-homedir"
@@ -14,8 +12,6 @@ import (
 )
 
 var cfgFile string
-var log = logrus.New()
-var mu = sync.RWMutex{}
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -81,5 +77,4 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Println("Using config file:", viper.ConfigFileUsed())
 	}
-	log.SetLevel(logrus.DebugLevel)
 }
