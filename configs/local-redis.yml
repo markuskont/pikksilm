@@ -1,0 +1,50 @@
+input:
+    suricata:
+        redis:
+            db: 0
+            host: localhost:6379
+            key: suricata
+            password: ""
+    sysmon:
+        redis:
+            db: 0
+            host: localhost:6379
+            key: winlogbeat
+            password: ""
+log:
+    debug: true
+    interval: 3s
+output:
+    correlations:
+        file:
+            enabled: false
+            path: ""
+        redis:
+            db: 1
+            enabled: true
+            host: localhost:6379
+            password: ""
+    suricata:
+        file:
+            enabled: false
+            path: ""
+        redis:
+            db: 0
+            enabled: true
+            host: localhost:6379
+            key: pikksilm
+            password: ""
+persist:
+    file:
+        enabled: false
+        path: ""
+process:
+    suricata:
+        buffer: 10000
+        bulk: 100000
+        cache: 100000
+        delay: 1s
+        enabled: true
+    sysmon:
+        buffer: 10000
+        cache: 1000000
