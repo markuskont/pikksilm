@@ -21,7 +21,16 @@ type SysmonCoreECS struct {
 			Executable  string `json:"executable"`
 			Name        string `json:"name"`
 			Pid         int    `json:"pid"`
+			EntityID    string `json:"entity_id"`
 		} `json:"parent"`
+		Pe struct {
+			Company          string `json:"company"`
+			Description      string `json:"description"`
+			FileVersion      string `json:"file_version"`
+			Imphash          string `json:"imphash"`
+			OriginalFileName string `json:"original_file_name"`
+			Product          string `json:"product"`
+		} `json:"pe"`
 		Pid              int    `json:"pid"`
 		WorkingDirectory string `json:"working_directory,omitempty"`
 	} `json:"process"`
