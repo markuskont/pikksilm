@@ -41,7 +41,7 @@ func Consume(c ConfigConsume) error {
 
 		log := Logger.With(
 			"key", c.Redis.Key,
-			"name", "redis sysmon consumer",
+			"name", "redis consumer",
 		)
 		log.Debug("worker start")
 		defer log.Info("Done")
